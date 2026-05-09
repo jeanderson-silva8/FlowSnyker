@@ -679,12 +679,6 @@ p { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
 .gradient-btn-spinner { animation: spin-btn 1s linear infinite; }
 
 /* Auth extras */
-.auth-forgot { display: flex; justify-content: flex-end; margin-top: 8px; }
-.auth-forgot a {
-  font-size: 13px; font-weight: 600; color: var(--accent-primary);
-  text-decoration: none; transition: color 0.15s;
-}
-.auth-forgot a:hover { color: var(--accent-secondary); }
 
 .auth-divider {
   display: flex; align-items: center; gap: 16px;

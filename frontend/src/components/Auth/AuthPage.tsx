@@ -169,11 +169,6 @@ export default function AuthPage() {
                   required
                   minLength={6}
                 />
-                {isLogin && (
-                  <div className="auth-forgot">
-                    <a href="#">Esqueceu a senha?</a>
-                  </div>
-                )}
               </div>
 
               <div className="form-field">
