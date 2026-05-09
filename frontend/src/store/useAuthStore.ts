@@ -29,7 +29,21 @@ export const useAuthStore = create<AuthState>((set) => ({
       connectSocket(data.accessToken);
       set({ user: data.user, isAuthenticated: true, isLoading: false });
     } catch (err: any) {
-      set({ error: err.response?.data?.error || 'Erro ao fazer login', isLoading: false });
+      console.error('Login error:', err);
+      let errorMsg = 'Erro ao fazer login';
+      
+      if (err.response) {
+        errorMsg = err.response.data?.error || `Erro no servidor (${err.response.status})`;
+        if (err.response.status === 429) {
+          errorMsg = 'Muitas tentativas. Aguarde 1 minuto.';
+        }
+      } else if (err.code === 'ERR_NETWORK') {
+        errorMsg = 'Servidor indisponível. Verifique se o backend está rodando e a VITE_API_URL.';
+      } else {
+        errorMsg = err.message || 'Erro ao fazer login';
+      }
+      
+      set({ error: errorMsg, isLoading: false });
     }
   },
 
@@ -41,7 +55,23 @@ export const useAuthStore = create<AuthState>((set) => ({
       connectSocket(data.accessToken);
       set({ user: data.user, isAuthenticated: true, isLoading: false });
     } catch (err: any) {
-      set({ error: err.response?.data?.error || 'Erro ao criar conta', isLoading: false });
+      console.error('Registration error:', err);
+      let errorMsg = 'Erro ao criar conta';
+      
+      if (err.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        errorMsg = err.response.data?.error || `Erro no servidor (${err.response.status})`;
+        if (err.response.status === 429) {
+          errorMsg = 'Muitas tentativas. Aguarde 1 minuto.';
+        }
+      } else if (err.code === 'ERR_NETWORK') {
+        errorMsg = 'Servidor indisponível. Verifique se o backend está rodando e a VITE_API_URL.';
+      } else {
+        errorMsg = err.message || 'Erro ao criar conta';
+      }
+      
+      set({ error: errorMsg, isLoading: false });
     }
   },
 
