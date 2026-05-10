@@ -31,15 +31,6 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Botão flutuante na lateral esquerda — só aparece no mobile */}
-      <button
-        className={`mobile-fab ${isSidebarOpen ? 'hidden' : ''}`}
-        onClick={toggleSidebar}
-        aria-label="Abrir menu"
-      >
-        <Menu size={20} />
-      </button>
-
       <div className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={closeSidebar} />
       <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
       <header className="sidebar-header">

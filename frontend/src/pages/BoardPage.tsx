@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus, Share2 } from 'lucide-react';
+import { ArrowLeft, UserPlus, Share2, Menu } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useBoardStore } from '../store/useBoardStore';
+import { useUIStore } from '../store/useUIStore';
 import { useSocket } from '../hooks/useSocket';
 import BoardView from '../components/Board/BoardView';
 import OnlineAvatars from '../components/Presence/OnlineAvatars';
@@ -12,6 +13,7 @@ export default function BoardPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentBoard, fetchBoard, isLoading } = useBoardStore();
+  const { toggleSidebar } = useUIStore();
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
 
   useSocket(id);
@@ -58,6 +60,9 @@ export default function BoardPage() {
     <div className="main-content">
       <div className="topbar">
         <div className="topbar-left">
+          <button className="menu-toggle" onClick={toggleSidebar}>
+            <Menu size={22} />
+          </button>
           <button className="btn-icon" onClick={() => navigate('/')}><ArrowLeft size={18} /></button>
           <h1 className="topbar-title">{currentBoard?.title || 'Quadro'}</h1>
           <span className="topbar-badge" style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-hover)', padding: '2px 8px', borderRadius: 4 }}>

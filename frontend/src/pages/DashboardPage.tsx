@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, LayoutGrid, Clock, Users } from 'lucide-react';
+import { Plus, LayoutGrid, Clock, Users, Menu } from 'lucide-react';
 import { useBoardStore } from '../store/useBoardStore';
+import { useUIStore } from '../store/useUIStore';
 
 export default function DashboardPage() {
   const { boards, fetchBoards, createBoard, isLoading } = useBoardStore();
+  const { toggleSidebar } = useUIStore();
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
   const navigate = useNavigate();
@@ -27,10 +29,18 @@ export default function DashboardPage() {
   };
 
   return (
+    <main className="main-content">
     <div className="dashboard">
       <div className="dashboard-header">
-        <h1>Seus Quadros</h1>
-        <p style={{ marginTop: 4 }}>Gerencie seus projetos e colabore em tempo real</p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <button className="menu-toggle" onClick={toggleSidebar}>
+            <Menu size={22} />
+          </button>
+          <div>
+            <h1>Seus Quadros</h1>
+            <p style={{ marginTop: 4 }}>Gerencie seus projetos e colabore em tempo real</p>
+          </div>
+        </div>
       </div>
 
       <div className="dashboard-grid">
@@ -86,5 +96,6 @@ export default function DashboardPage() {
         </div>
       )}
     </div>
+    </main>
   );
 }
