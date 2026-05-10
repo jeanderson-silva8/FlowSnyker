@@ -7,6 +7,7 @@ import RefreshToken from '../models/RefreshToken';
 import { AuthRequest } from '../middleware/auth';
 import { seedDemoBoard } from '../seeds/demoBoard';
 import { logger } from '../utils/logger';
+import { sendPasswordResetEmail } from '../utils/email';
 
 const ACCESS_TTL = (process.env.JWT_EXPIRES_IN || '15m') as SignOptions['expiresIn'];
 const REFRESH_TTL_DAYS = parseInt(process.env.JWT_REFRESH_TTL_DAYS || '7', 10);
@@ -203,6 +204,109 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 };
 
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      // Retorna sucesso mesmo se o email não existir (segurança: não revelar se o email está cadastrado)
+      res.json({ message: 'Se o email estiver cadastrado, você receberá um link de recuperação.' });
+      return;
+    }
+
+    // Gerar token de recuperação
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // Salvar no banco com expiração de 1 hora
+    user.resetPasswordToken = resetTokenHash;
+    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { resetPasswordToken: resetTokenHash, resetPasswordExpires: user.resetPasswordExpires } }
+    );
+
+    // Construir a URL de reset
+    const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim() || 'http://localhost:5173';
+    const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
+
+    // 📧 Enviar email de recuperação via Resend
+    const emailSent = await sendPasswordResetEmail({
+      to: email,
+      resetUrl,
+      userName: user.name,
+    });
+
+    if (!emailSent) {
+      // Fallback: imprime no console se o envio falhar
+      logger.warn('Email send failed, printing reset link to console');
+      logger.info('═══════════════════════════════════════════════════════════');
+      logger.info('🔑 LINK DE RECUPERAÇÃO DE SENHA (fallback)');
+      logger.info(`📧 Email: ${email}`);
+      logger.info(`🔗 URL: ${resetUrl}`);
+      logger.info('═══════════════════════════════════════════════════════════');
+    }
+
+    res.json({ message: 'Se o email estiver cadastrado, você receberá um link de recuperação.' });
+  } catch (error) {
+    logger.error('ForgotPassword failed', { error: (error as Error).message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+    const tokenStr = Array.isArray(token) ? token[0] : token;
+
+    if (!tokenStr || !password) {
+      res.status(400).json({ error: 'Token e nova senha são obrigatórios' });
+      return;
+    }
+
+    if (password.length < 6) {
+      res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+      return;
+    }
+
+    // Hashear o token recebido para comparar com o salvo no banco
+    const tokenHash = crypto.createHash('sha256').update(tokenStr).digest('hex');
+
+    const user = await User.findOne({
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: new Date() },
+    }).select('+resetPasswordToken +resetPasswordExpires');
+
+    if (!user) {
+      res.status(400).json({ error: 'Token inválido ou expirado. Solicite um novo link de recuperação.' });
+      return;
+    }
+
+    // Atualizar a senha
+    const hashedPassword = await bcrypt.hash(password, 12);
+    await User.updateOne(
+      { _id: user._id },
+      {
+        $set: {
+          password: hashedPassword,
+          resetPasswordToken: null,
+          resetPasswordExpires: null,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      }
+    );
+
+    logger.info('Password reset successful', { userId: user._id.toString() });
+    res.json({ message: 'Senha redefinida com sucesso! Faça login com sua nova senha.' });
+  } catch (error) {
+    logger.error('ResetPassword failed', { error: (error as Error).message });
+    res.status(500).json({ error: 'Erro interno do servidor' });
+  }
+};
+
 export const logout = async (req: Request, res: Response): Promise<void> => {
   try {
     const raw = req.cookies?.refreshToken;
@@ -220,3 +324,4 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
     res.json({ message: 'Logout realizado com sucesso' });
   }
 };
+

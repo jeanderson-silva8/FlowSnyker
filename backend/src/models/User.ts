@@ -8,6 +8,8 @@ export interface IUser extends Document {
   avatar: string;
   failedLoginAttempts: number;
   lockedUntil: Date | null;
+  resetPasswordToken: string | null;
+  resetPasswordExpires: Date | null;
   createdAt: Date;
 }
 
@@ -43,6 +45,16 @@ const userSchema = new Schema<IUser>(
       select: false,
     },
     lockedUntil: {
+      type: Date,
+      default: null,
+      select: false,
+    },
+    resetPasswordToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    resetPasswordExpires: {
       type: Date,
       default: null,
       select: false,

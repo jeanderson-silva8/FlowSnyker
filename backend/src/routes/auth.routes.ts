@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { register, login, refresh, getMe, logout } from '../controllers/auth.controller';
+import { register, login, refresh, getMe, logout, forgotPassword, resetPassword } from '../controllers/auth.controller';
 import auth from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLimiter } from '../middleware/rateLimiter';
@@ -18,10 +18,21 @@ const loginSchema = z.object({
   password: z.string().min(1, 'Senha é obrigatória'),
 });
 
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Email inválido'),
+});
+
+const resetPasswordSchema = z.object({
+  password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+});
+
 router.post('/register', authLimiter, validate(registerSchema), register);
 router.post('/login', authLimiter, validate(loginSchema), login);
 router.post('/refresh', refresh);
 router.get('/me', auth, getMe);
 router.post('/logout', logout);
+router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), forgotPassword);
+router.post('/reset-password/:token', authLimiter, validate(resetPasswordSchema), resetPassword);
 
 export default router;
+

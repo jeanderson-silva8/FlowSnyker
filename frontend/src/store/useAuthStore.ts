@@ -8,11 +8,15 @@ type AuthState = {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  successMessage: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
+  forgotPassword: (email: string) => Promise<boolean>;
+  resetPassword: (token: string, password: string) => Promise<boolean>;
   clearError: () => void;
+  clearSuccess: () => void;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -20,10 +24,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
   isLoading: true,
   error: null,
+  successMessage: null,
 
   login: async (email, password) => {
     try {
-      set({ isLoading: true, error: null });
+      set({ isLoading: true, error: null, successMessage: null });
       const { data } = await api.post('/auth/login', { email, password });
       setAccessToken(data.accessToken);
       connectSocket(data.accessToken);
@@ -49,7 +54,7 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   register: async (name, email, password) => {
     try {
-      set({ isLoading: true, error: null });
+      set({ isLoading: true, error: null, successMessage: null });
       const { data } = await api.post('/auth/register', { name, email, password });
       setAccessToken(data.accessToken);
       connectSocket(data.accessToken);
@@ -100,8 +105,58 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  forgotPassword: async (email) => {
+    try {
+      set({ isLoading: true, error: null, successMessage: null });
+      const { data } = await api.post('/auth/forgot-password', { email });
+      set({
+        isLoading: false,
+        successMessage: data.message || 'Se o email estiver cadastrado, você receberá um link de recuperação.',
+      });
+      return true;
+    } catch (err: any) {
+      let errorMsg = 'Erro ao solicitar recuperação de senha';
+      if (err.response) {
+        errorMsg = err.response.data?.error || errorMsg;
+        if (err.response.status === 429) {
+          errorMsg = 'Muitas tentativas. Aguarde 1 minuto.';
+        }
+      } else if (err.code === 'ERR_NETWORK') {
+        errorMsg = 'Servidor indisponível. Verifique se o backend está rodando.';
+      }
+      set({ error: errorMsg, isLoading: false });
+      return false;
+    }
+  },
+
+  resetPassword: async (token, password) => {
+    try {
+      set({ isLoading: true, error: null, successMessage: null });
+      const { data } = await api.post(`/auth/reset-password/${token}`, { password });
+      set({
+        isLoading: false,
+        successMessage: data.message || 'Senha redefinida com sucesso!',
+      });
+      return true;
+    } catch (err: any) {
+      let errorMsg = 'Erro ao redefinir senha';
+      if (err.response) {
+        errorMsg = err.response.data?.error || errorMsg;
+        if (err.response.status === 429) {
+          errorMsg = 'Muitas tentativas. Aguarde 1 minuto.';
+        }
+      } else if (err.code === 'ERR_NETWORK') {
+        errorMsg = 'Servidor indisponível. Verifique se o backend está rodando.';
+      }
+      set({ error: errorMsg, isLoading: false });
+      return false;
+    }
+  },
+
   clearError: () => set({ error: null }),
+  clearSuccess: () => set({ successMessage: null }),
 }));
 
 // Re-export so consumers that need the raw token (e.g., socket reconnect) can read it
 export { getAccessToken };
+

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { LayoutDashboard, LogOut, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, LogOut, Trash2, Menu } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useBoardStore } from '../../store/useBoardStore';
+import { useUIStore } from '../../store/useUIStore';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 import { FlowSnykerLogo } from '../UI/FlowSnykerLogo';
@@ -10,25 +11,37 @@ export default function Sidebar() {
   const { user, logout } = useAuthStore();
   const { boards, deleteBoard } = useBoardStore();
   const [boardToDelete, setBoardToDelete] = useState<string | null>(null);
+  const { isSidebarOpen, toggleSidebar, closeSidebar } = useUIStore();
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    closeSidebar();
+  }, [location.pathname, closeSidebar]);
 
   const handleDeleteBoard = async () => {
     if (!boardToDelete) return;
     const id = boardToDelete;
-    setBoardToDelete(null); // Fecha o modal imediatamente
-    
-    // Deleta o quadro (ação instantânea)
+    setBoardToDelete(null);
     deleteBoard(id);
-    
-    // Se o usuário estiver na tela do quadro apagado, redireciona para o painel
     if (location.pathname === `/board/${id}`) {
       navigate('/');
     }
   };
 
   return (
-    <aside className="sidebar">
+    <>
+      {/* Botão flutuante na lateral esquerda — só aparece no mobile */}
+      <button
+        className={`mobile-fab ${isSidebarOpen ? 'hidden' : ''}`}
+        onClick={toggleSidebar}
+        aria-label="Abrir menu"
+      >
+        <Menu size={20} />
+      </button>
+
+      <div className={`sidebar-overlay ${isSidebarOpen ? 'open' : ''}`} onClick={closeSidebar} />
+      <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
       <header className="sidebar-header">
         <div className="sidebar-brand" onClick={() => navigate('/')} style={{ cursor: 'pointer' }}>
           <div className="sidebar-brand-icon" style={{ background: 'transparent', boxShadow: 'none' }}>
@@ -103,5 +116,6 @@ export default function Sidebar() {
         </div>
       )}
     </aside>
+    </>
   );
 }

@@ -7,6 +7,7 @@ import AuthPage from './components/Auth/AuthPage';
 import Sidebar from './components/Layout/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import BoardPage from './pages/BoardPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import BackgroundParticleField from './components/UI/BackgroundParticleField';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,7 @@ export default function App() {
       <Toaster position="top-right" />
       <Routes>
         <Route path="/login" element={<AuthPage />} />
+        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
         <Route path="/" element={
           <PrivateRoute>
             <AppLayout><DashboardPage /></AppLayout>

@@ -11,10 +11,11 @@ import { FlowSnykerLogo } from '../UI/FlowSnykerLogo';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const { login, register, error, isLoading, isAuthenticated, clearError } = useAuthStore();
+  const { login, register, forgotPassword, error, isLoading, isAuthenticated, successMessage, clearError, clearSuccess } = useAuthStore();
 
   // GSAP Refs
   const containerRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,9 @@ export default function AuthPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (isLogin) {
+    if (isForgotPassword) {
+      await forgotPassword(email);
+    } else if (isLogin) {
       await login(email, password);
     } else {
       await register(name, email, password);
@@ -76,6 +79,8 @@ export default function AuthPage() {
 
   const toggleMode = () => {
     clearError();
+    clearSuccess();
+    setIsForgotPassword(false);
     setIsLogin(!isLogin);
 
     // Animate form fields on mode switch
@@ -83,6 +88,38 @@ export default function AuthPage() {
       const fields = formRef.current.querySelectorAll('.form-field');
       gsap.fromTo(fields, { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, stagger: 0.06, ease: 'power2.out' });
     }
+  };
+
+  const goToForgotPassword = () => {
+    clearError();
+    clearSuccess();
+    setIsForgotPassword(true);
+
+    // Animate form fields suavemente
+    setTimeout(() => {
+      if (formRef.current) {
+        const fields = formRef.current.querySelectorAll('.form-field');
+        gsap.fromTo(fields, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, stagger: 0.06, ease: 'power2.out' });
+      }
+    }, 50);
+  };
+
+  const goBackToLogin = () => {
+    clearError();
+    clearSuccess();
+    setIsForgotPassword(false);
+
+    setTimeout(() => {
+      if (formRef.current) {
+        const fields = formRef.current.querySelectorAll('.form-field');
+        gsap.fromTo(fields, { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, stagger: 0.06, ease: 'power2.out' });
+      }
+    }, 50);
+  };
+
+  const getTitle = () => {
+    if (isForgotPassword) return 'Recuperar sua senha';
+    return isLogin ? 'Acesse sua área de trabalho' : 'Crie sua conta e colabore';
   };
 
   return (
@@ -126,16 +163,31 @@ export default function AuthPage() {
             {/* Heading */}
             <div ref={headingRef} style={{ opacity: 0 }}>
               <h1 className="auth-title">
-                {isLogin ? 'Acesse sua área de trabalho' : 'Crie sua conta e colabore'}
+                {getTitle()}
               </h1>
+              {isForgotPassword && (
+                <p className="auth-subtitle">
+                  Insira seu email cadastrado e enviaremos um link para redefinir sua senha.
+                </p>
+              )}
             </div>
 
             {/* Error */}
             {error && <div className="auth-error">{error}</div>}
 
+            {/* Success Message */}
+            {successMessage && (
+              <div className="auth-success">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M13.3 4.3L6.5 11.1L2.7 7.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {successMessage}
+              </div>
+            )}
+
             {/* Form */}
             <form ref={formRef} onSubmit={handleSubmit} className="auth-premium-form">
-              {!isLogin && (
+              {!isLogin && !isForgotPassword && (
                 <div className="form-field">
                   <AnimatedInput
                     label="Nome"
@@ -159,31 +211,55 @@ export default function AuthPage() {
                 />
               </div>
 
-              <div className="form-field">
-                <AnimatedInput
-                  label="Senha"
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                />
-              </div>
+              {!isForgotPassword && (
+                <div className="form-field">
+                  <AnimatedInput
+                    label="Senha"
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                  />
+                </div>
+              )}
+
+              {/* Link "Esqueci minha senha" — só aparece no login */}
+              {isLogin && !isForgotPassword && (
+                <div className="form-field auth-forgot-link-wrapper">
+                  <button type="button" className="auth-forgot-link" onClick={goToForgotPassword}>
+                    Esqueci minha senha
+                  </button>
+                </div>
+              )}
 
               <div className="form-field">
                 <GradientButton type="submit" isLoading={isLoading}>
-                  {isLogin ? 'Entrar' : 'Criar Conta'}
+                  {isForgotPassword
+                    ? 'Enviar link de recuperação'
+                    : isLogin
+                      ? 'Entrar'
+                      : 'Criar Conta'}
                 </GradientButton>
               </div>
             </form>
 
             {/* Footer */}
             <div ref={footerRef} className="auth-switch-premium" style={{ opacity: 0 }}>
-              {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
-              <button onClick={toggleMode}>
-                {isLogin ? 'Criar conta' : 'Fazer login'}
-              </button>
+              {isForgotPassword ? (
+                <>
+                  Lembrou a senha?{' '}
+                  <button onClick={goBackToLogin}>Voltar ao login</button>
+                </>
+              ) : (
+                <>
+                  {isLogin ? 'Não tem conta? ' : 'Já tem conta? '}
+                  <button onClick={toggleMode}>
+                    {isLogin ? 'Criar conta' : 'Fazer login'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </GlassCard>
@@ -191,3 +267,4 @@ export default function AuthPage() {
     </div>
   );
 }
+

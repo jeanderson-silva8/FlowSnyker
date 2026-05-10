@@ -60,14 +60,14 @@ export default function BoardPage() {
         <div className="topbar-left">
           <button className="btn-icon" onClick={() => navigate('/')}><ArrowLeft size={18} /></button>
           <h1 className="topbar-title">{currentBoard?.title || 'Quadro'}</h1>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-hover)', padding: '2px 8px', borderRadius: 4 }}>
+          <span className="topbar-badge" style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', background: 'var(--bg-hover)', padding: '2px 8px', borderRadius: 4 }}>
             {currentBoard?.columns.length || 0} colunas
           </span>
         </div>
         <div className="topbar-right">
           <OnlineAvatars />
-          <button className="btn btn-secondary btn-sm" onClick={() => setIsInviteModalOpen(true)}>
-            <UserPlus size={14} /> Convidar
+          <button className="btn btn-secondary btn-sm" onClick={() => setIsInviteModalOpen(true)} aria-label="Convidar membros">
+            <UserPlus size={14} /> <span>Convidar</span>
           </button>
           <button className="btn btn-secondary btn-sm" onClick={handleShare}>
             <Share2 size={14} />
