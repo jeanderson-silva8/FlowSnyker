@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, LogOut, Trash2, Menu } from 'lucide-react';
+import { LayoutDashboard, LogOut, Trash2 } from 'lucide-react';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useBoardStore } from '../../store/useBoardStore';
 import { useUIStore } from '../../store/useUIStore';
@@ -11,7 +11,7 @@ export default function Sidebar() {
   const { user, logout } = useAuthStore();
   const { boards, deleteBoard } = useBoardStore();
   const [boardToDelete, setBoardToDelete] = useState<string | null>(null);
-  const { isSidebarOpen, toggleSidebar, closeSidebar } = useUIStore();
+  const { isSidebarOpen, closeSidebar } = useUIStore();
   const navigate = useNavigate();
   const location = useLocation();
 
