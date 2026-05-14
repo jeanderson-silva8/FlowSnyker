@@ -1,7 +1,16 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { logger } from './logger';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// ═══════════════════════════════════════════════════════
+// 📧 Gmail SMTP — Envio de emails para QUALQUER destinatário
+// ═══════════════════════════════════════════════════════
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER,
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
 interface SendResetEmailParams {
   to: string;
@@ -11,19 +20,14 @@ interface SendResetEmailParams {
 
 export const sendPasswordResetEmail = async ({ to, resetUrl, userName }: SendResetEmailParams): Promise<boolean> => {
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'FlowSnyker <onboarding@resend.dev>',
-      to: [to],
+    await transporter.sendMail({
+      from: `"FlowSnyker" <${process.env.GMAIL_USER}>`,
+      to,
       subject: '🔑 Recuperação de Senha — FlowSnyker',
       html: buildResetEmailHTML(resetUrl, userName),
     });
 
-    if (error) {
-      logger.error('Resend email error', { error: error.message });
-      return false;
-    }
-
-    logger.info('Password reset email sent', { emailId: data?.id, to });
+    logger.info('Password reset email sent', { to });
     return true;
   } catch (err) {
     logger.error('Failed to send reset email', { error: (err as Error).message });

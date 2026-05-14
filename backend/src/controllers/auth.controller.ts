@@ -231,7 +231,7 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim() || 'http://localhost:5173';
     const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
 
-    // 📧 Enviar email de recuperação via Resend
+    // 📧 Enviar email de recuperação via Gmail SMTP
     const emailSent = await sendPasswordResetEmail({
       to: email,
       resetUrl,

@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import connectDB from './config/db';
+import { wafMiddleware, obfuscateServer, getWafStats } from './middleware/waf';
 import { generalLimiter } from './middleware/rateLimiter';
 import { sanitizeRequest } from './middleware/sanitize';
 import { initializeSocket } from './sockets';
@@ -26,7 +27,18 @@ const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
   .map((o) => o.trim())
   .filter(Boolean);
 
-// Security headers — strict CSP since this is an API server (no inline HTML rendered)
+// ═══════════════════════════════════════════════════════════════════
+// 🛡️ SECURITY LAYER 1 — WAF (Web Application Firewall)
+// Intercepts malicious requests BEFORE they reach any route.
+// Covers: Scanner blocking, Path Traversal, XSS, Injection,
+// HTTP Method Restriction, Header Anomaly, Auto-Blacklist.
+// ═══════════════════════════════════════════════════════════════════
+app.use(obfuscateServer);
+app.use(wafMiddleware);
+
+// ═══════════════════════════════════════════════════════════════════
+// 🛡️ SECURITY LAYER 2 — Helmet (HTTP Security Headers)
+// ═══════════════════════════════════════════════════════════════════
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -60,12 +72,13 @@ app.use('/api/auth', authRoutes);
 app.use('/api/boards', boardRoutes);
 app.use('/api/cards', cardRoutes);
 
-// Health check
+// Health check (with WAF stats)
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'operational',
     service: 'FlowSnyker API',
     timestamp: new Date().toISOString(),
+    waf: getWafStats(),
   });
 });
 

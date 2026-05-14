@@ -99,8 +99,9 @@ Acesse a aplicação em: `http://localhost:5173`
 
 ---
 
-## 🤝 Autor
-**Jeanderson Silva** 😎🤌
+## 👑 Autor
+
+**Jeanderson Silva** 🤓✍️
 
 *Desenvolvedor Full-Stack | Engenheiro Frontend | Arquiteto de Software*
 
