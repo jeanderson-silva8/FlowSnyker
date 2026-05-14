@@ -1,16 +1,12 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { logger } from './logger';
 
 // ═══════════════════════════════════════════════════════
-// 📧 Gmail SMTP — Envio de emails para QUALQUER destinatário
+// 📧 Resend API — Envio via HTTP (funciona no Render Free Tier)
+// O Render bloqueia portas SMTP (25, 465, 587).
+// O Resend usa HTTPS (porta 443) — sem bloqueio.
 // ═══════════════════════════════════════════════════════
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 interface SendResetEmailParams {
   to: string;
@@ -20,14 +16,19 @@ interface SendResetEmailParams {
 
 export const sendPasswordResetEmail = async ({ to, resetUrl, userName }: SendResetEmailParams): Promise<boolean> => {
   try {
-    await transporter.sendMail({
-      from: `"FlowSnyker" <${process.env.GMAIL_USER}>`,
+    const { data, error } = await resend.emails.send({
+      from: 'FlowSnyker <onboarding@resend.dev>',
       to,
       subject: '🔑 Recuperação de Senha — FlowSnyker',
       html: buildResetEmailHTML(resetUrl, userName),
     });
 
-    logger.info('Password reset email sent', { to });
+    if (error) {
+      logger.error('Resend API error', { error: error.message });
+      return false;
+    }
+
+    logger.info('Password reset email sent', { to, id: data?.id });
     return true;
   } catch (err) {
     logger.error('Failed to send reset email', { error: (err as Error).message });
