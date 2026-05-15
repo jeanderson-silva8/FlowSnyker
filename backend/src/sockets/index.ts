@@ -3,6 +3,7 @@ import { Server as SocketServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { registerBoardEvents } from './boardEvents';
 import { registerPresenceEvents } from './presenceEvents';
+import { logger } from '../utils/logger';
 
 export const initializeSocket = (httpServer: HttpServer): SocketServer => {
   const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
@@ -29,7 +30,8 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     }
 
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { userId: string };
+      // JWT_SECRET já validado no boot (fail-fast em server.ts)
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
       (socket as any).userId = decoded.userId;
       next();
     } catch (error) {
@@ -41,7 +43,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
   const eventCounts = new Map<string, { count: number; resetTime: number }>();
 
   io.on('connection', (socket) => {
-    console.log(`⚡ Socket connected: ${socket.id}`);
+    logger.info('Socket connected', { socketId: socket.id });
 
     // Simple rate limiting
     const originalOn = socket.on.bind(socket);
@@ -81,7 +83,7 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
 
     socket.on('disconnect', () => {
       eventCounts.delete(socket.id);
-      console.log(`⚡ Socket disconnected: ${socket.id}`);
+      logger.info('Socket disconnected', { socketId: socket.id });
     });
   });
 

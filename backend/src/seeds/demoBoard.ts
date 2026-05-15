@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Board from '../models/Board';
 import Card from '../models/Card';
+import { logger } from '../utils/logger';
 
 /**
  * Cria um board de demonstração completo para um novo usuário.
@@ -179,9 +180,9 @@ export async function seedDemoBoard(userId: mongoose.Types.ObjectId): Promise<vo
 
     await Card.insertMany(demoCards);
 
-    console.log(`✅ Board de demonstração criado para o usuário ${userId}`);
+    logger.info('Demo board created', { userId: userId.toString() });
   } catch (error) {
-    console.error('❌ Erro ao criar board de demonstração:', error);
+    logger.error('Demo board creation failed', { error: (error as Error).message });
     // Não lança o erro para não bloquear o registro do usuário
   }
 }

@@ -1,0 +1,11 @@
+# Backend
+node_modules
+npm-debug.log
+dist
+.env
+.env.*
+!.env.example
+*.md
+.tmp/
+src/__tests__/
+vitest.config.ts

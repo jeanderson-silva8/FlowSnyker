@@ -3,6 +3,8 @@
 
 ![React](https://img.shields.io/badge/react-%2320232a.svg?style=for-the-badge&logo=react&logoColor=%2361DAFB) ![NodeJS](https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white) ![MongoDB](https://img.shields.io/badge/MongoDB-%234ea94b.svg?style=for-the-badge&logo=mongodb&logoColor=white) ![Socket.io](https://img.shields.io/badge/Socket.io-black?style=for-the-badge&logo=socket.io&badgeColor=010101)
 
+![CI](https://github.com/jeanderson-silva8/FlowSnyker/actions/workflows/ci.yml/badge.svg)
+
 🟢 **LIVE DEMO**: [Acesse o FlowSnyker Ao Vivo Aqui](#)
 
 ---
@@ -38,7 +40,7 @@ No FlowSnyker, a colaboração em tempo real não compromete o isolamento de dad
 - **Sistema de Presença (Avatares Online):** Integração social indicando visualmente (com avatares dinâmicos e status verde) exatamente quem está operando o quadro naquele instante, prevenindo choques de edição.
 - **Drag & Drop de Baixa Latência:** Física e animações de manipulação de cards extremamente fluidas construídas com `@dnd-kit/core`.
 - **Dashboard Premium (Fire Flow):** UI de alta fidelidade com micro-interações, feedback visual tátil e painéis translúcidos (Glassmorphism) com reflexos controlados.
-- **Autenticação Segura JWT:** Fluxo de login/cadastro encriptado (Bcrypt) que protege tanto rotas HTTP RESTful quanto o Handshake das conexões WebSocket.
+- **Autenticação Segura JWT:** Fluxo de login/cadastro com hash **Argon2id** (padrão OWASP) e refresh token rotation com detecção de reuso. Protege rotas HTTP e WebSocket handshake.
 
 ---
 
@@ -94,8 +96,51 @@ Acesse a aplicação em: `http://localhost:5173`
 ```text
 ├── backend/          # Node.js, Express, Controllers, Middlewares JWT, Socket.io Handlers
 ├── frontend/         # React, Vite, Componentes UI Glassmorphism, Zustand Store, Dnd-Kit
+├── docs/             # API.md, THREAT_MODEL.md
+├── SECURITY.md       # Política de segurança e disclosure
 └── README.md         # Documentação Arquitetural
 ```
+
+---
+
+## 🧪 Testes
+
+```bash
+cd backend
+npm test          # Roda 20+ testes (auth, autorização, Argon2id)
+npm run type-check  # Type-check completo sem emitir
+```
+
+**Cobertura de testes estratégicos:**
+- Registro, login, lockout, refresh rotation, reuse detection
+- Autorização de board (membro vs não-membro vs owner)
+- Criação de card com validação de membership
+- Migração Argon2id
+
+---
+
+## 🔒 Segurança
+
+| Camada | Implementação | Status |
+|--------|---------------|:------:|
+| **Hash de senha** | Argon2id (OWASP) com migração transparente de bcrypt | ✅ |
+| **Tokens** | JWT curto (15m) + Refresh rotation + Detecção de reuso | ✅ |
+| **Cookies** | HttpOnly, Secure, SameSite=Strict | ✅ |
+| **Autorização** | Middleware centralizado por board em TODAS as rotas e sockets | ✅ |
+| **Validação** | Zod em HTTP e WebSocket | ✅ |
+| **WAF** | Custom middleware: XSS, SQLi, path traversal, scanner block | ✅ |
+| **Headers** | Helmet + CSP + HSTS + referrer-policy | ✅ |
+| **Rate limiting** | 100/min geral + 5/min auth + Account lockout (15 min) | ✅ |
+| **CSRF** | Origin validation no refresh | ✅ |
+| **Logging** | Estruturado com redação de dados sensíveis + Correlation ID | ✅ |
+
+**O que NÃO está implementado (transparência):**
+- MFA/2FA
+- Audit log persistente (logs vão para stdout)
+- Encryption at rest customizado (usa MongoDB Atlas default)
+
+> Para reportar vulnerabilidades, veja [SECURITY.md](SECURITY.md).
+> Para detalhes técnicos, veja [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ---
 

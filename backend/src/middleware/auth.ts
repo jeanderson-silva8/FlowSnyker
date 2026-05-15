@@ -15,7 +15,8 @@ const auth = (req: AuthRequest, res: Response, next: NextFunction): void => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { userId: string };
+    // JWT_SECRET já validado no boot (fail-fast em server.ts)
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
     req.userId = decoded.userId;
     next();
   } catch (error) {

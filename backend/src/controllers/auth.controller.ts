@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import { hash as argon2Hash, verify as argon2Verify } from '@node-rs/argon2';
 import crypto from 'crypto';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import User from '../models/User';
@@ -17,7 +18,7 @@ const LOCKOUT_MINUTES = 15;
 const LOCKOUT_MS = LOCKOUT_MINUTES * 60 * 1000;
 
 const generateAccessToken = (userId: string): string =>
-  jwt.sign({ userId }, process.env.JWT_SECRET as string, { expiresIn: ACCESS_TTL });
+  jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: ACCESS_TTL });
 
 const hashToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
@@ -61,7 +62,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await argon2Hash(password);
     const user = await User.create({
       name,
       email,
@@ -101,7 +102,22 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Item 13: Argon2id com fallback transparente para bcrypt
+    // Hashes bcrypt começam com '$2a$' ou '$2b$', Argon2 com '$argon2'
+    const isBcryptHash = user.password.startsWith('$2');
+    let isMatch: boolean;
+
+    if (isBcryptHash) {
+      isMatch = await bcrypt.compare(password, user.password);
+      if (isMatch) {
+        // Migração transparente: re-hash com Argon2id
+        const newHash = await argon2Hash(password);
+        await User.updateOne({ _id: user._id }, { $set: { password: newHash } });
+        logger.info('Password migrated to Argon2id', { userId: user._id.toString() });
+      }
+    } else {
+      isMatch = await argon2Verify(user.password, password);
+    }
     if (!isMatch) {
       const attempts = (user.failedLoginAttempts || 0) + 1;
       const update: Record<string, unknown> = { failedLoginAttempts: attempts };
@@ -266,8 +282,8 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    if (password.length < 6) {
-      res.status(400).json({ error: 'Senha deve ter pelo menos 6 caracteres' });
+    if (password.length < 8 || !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(password)) {
+      res.status(400).json({ error: 'Senha deve ter pelo menos 8 caracteres, com 1 maiúscula, 1 minúscula e 1 número' });
       return;
     }
 
@@ -285,7 +301,7 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
     }
 
     // Atualizar a senha
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await argon2Hash(password);
     await User.updateOne(
       { _id: user._id },
       {

@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Board from '../models/Board';
 import Card from '../models/Card';
 import { AuthRequest } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 export const createBoard = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -26,7 +27,7 @@ export const createBoard = async (req: AuthRequest, res: Response): Promise<void
 
     res.status(201).json(populated);
   } catch (error) {
-    console.error('Create board error:', error);
+    logger.error('Create board error', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro ao criar board' });
   }
 };
@@ -38,22 +39,32 @@ export const getBoards = async (req: AuthRequest, res: Response): Promise<void> 
       .populate('members', 'name email avatar')
       .sort({ updatedAt: -1 });
 
-    // Get card counts for each board
-    const boardsWithCounts = await Promise.all(
-      boards.map(async (board) => {
-        const cardCount = await Card.countDocuments({ boardId: board._id });
-        return { ...board.toObject(), cardCount };
-      })
+    // Item 15: Resolver N+1 — uma única aggregate ao invés de N countDocuments
+    const boardIds = boards.map((b) => b._id);
+    const cardCounts = await Card.aggregate([
+      { $match: { boardId: { $in: boardIds } } },
+      { $group: { _id: '$boardId', count: { $sum: 1 } } },
+    ]);
+
+    const countMap = new Map(
+      cardCounts.map((c) => [c._id.toString(), c.count as number])
     );
+
+    const boardsWithCounts = boards.map((board) => ({
+      ...board.toObject(),
+      cardCount: countMap.get(board._id.toString()) || 0,
+    }));
 
     res.json(boardsWithCounts);
   } catch (error) {
+    logger.error('Get boards error', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro ao buscar boards' });
   }
 };
 
 export const getBoard = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Autorização já verificada pelo middleware requireBoardAccess('params.id')
     const board = await Board.findById(req.params.id)
       .populate('owner', 'name email avatar')
       .populate('members', 'name email avatar');
@@ -63,34 +74,23 @@ export const getBoard = async (req: AuthRequest, res: Response): Promise<void> =
       return;
     }
 
-    const isMember = board.members.some(
-      (m: any) => m._id.toString() === req.userId
-    );
-    if (!isMember) {
-      res.status(403).json({ error: 'Acesso negado a este board' });
-      return;
-    }
-
     const cards = await Card.find({ boardId: board._id })
       .populate('assignees', 'name email avatar')
       .sort({ order: 1 });
 
     res.json({ board, cards });
   } catch (error) {
+    logger.error('Get board error', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro ao buscar board' });
   }
 };
 
 export const updateBoard = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Autorização de owner já verificada pelo middleware requireBoardOwner('params.id')
     const board = await Board.findById(req.params.id);
     if (!board) {
       res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
-
-    if (board.owner.toString() !== req.userId) {
-      res.status(403).json({ error: 'Apenas o dono pode editar o board' });
       return;
     }
 
@@ -101,20 +101,17 @@ export const updateBoard = async (req: AuthRequest, res: Response): Promise<void
 
     res.json(board);
   } catch (error) {
+    logger.error('Update board error', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro ao atualizar board' });
   }
 };
 
 export const deleteBoard = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Autorização de owner já verificada pelo middleware requireBoardOwner('params.id')
     const board = await Board.findById(req.params.id);
     if (!board) {
       res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
-
-    if (board.owner.toString() !== req.userId) {
-      res.status(403).json({ error: 'Apenas o dono pode deletar o board' });
       return;
     }
 
@@ -123,12 +120,15 @@ export const deleteBoard = async (req: AuthRequest, res: Response): Promise<void
 
     res.json({ message: 'Board deletado com sucesso' });
   } catch (error) {
+    logger.error('Delete board error', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro ao deletar board' });
   }
 };
 
 export const inviteMember = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
+    // Item 6: Autorização já verificada pelo middleware requireBoardAccess('params.id')
+    // Apenas membros existentes podem convidar novos membros.
     const { email } = req.body;
     const board = await Board.findById(req.params.id);
 
@@ -161,6 +161,7 @@ export const inviteMember = async (req: AuthRequest, res: Response): Promise<voi
 
     res.json(populated);
   } catch (error) {
+    logger.error('Invite member error', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro ao convidar membro' });
   }
 };
