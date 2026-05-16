@@ -89,6 +89,7 @@ npm run type-check  # Type-check completo sem emitir
 - **Dashboard Premium (Fire Flow):** UI de alta fidelidade com micro-interações, feedback visual tátil e painéis translúcidos (Glassmorphism) com reflexos controlados.
 - **Autenticação Segura JWT:** Fluxo de login/cadastro com hash **Argon2id** (padrão OWASP) e refresh token rotation com detecção de reuso. Protege rotas HTTP e WebSocket handshake.
 
+---
 
 ## 🔒 Arquitetura de Convites e Compartilhamento Seguro
 
