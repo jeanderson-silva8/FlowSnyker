@@ -15,8 +15,19 @@ const auth = (req: AuthRequest, res: Response, next: NextFunction): void => {
     }
 
     const token = authHeader.split(' ')[1];
-    // JWT_SECRET já validado no boot (fail-fast em server.ts)
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+    // FIX #2: Allowlist de algoritmos + issuer/audience — previne algorithm confusion
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!, {
+      algorithms: ['HS256'],
+      issuer: 'flowsnyker',
+      audience: 'flowsnyker-app',
+    }) as { userId: string };
+
+    // Validação adicional do payload
+    if (!decoded.userId || typeof decoded.userId !== 'string') {
+      res.status(401).json({ error: 'Token payload inválido' });
+      return;
+    }
+
     req.userId = decoded.userId;
     next();
   } catch (error) {

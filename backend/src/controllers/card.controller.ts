@@ -3,143 +3,111 @@ import Card from '../models/Card';
 import Board from '../models/Board';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { asyncHandler } from '../utils/asyncHandler';
+import { NotFoundError, ForbiddenError, BadRequestError } from '../utils/errors';
 
 /**
  * Verifica se o usuário é membro do board ao qual o card pertence.
  * Usado nos endpoints que recebem cardId via params (update, move, delete).
  */
-const assertCardAccess = async (cardId: string, userId: string): Promise<{ allowed: boolean; card: any; status: number; error?: string }> => {
+const assertCardAccess = async (cardId: string, userId: string) => {
   if (!/^[a-f0-9]{24}$/.test(cardId)) {
-    return { allowed: false, card: null, status: 400, error: 'Card ID inválido' };
+    throw new BadRequestError('Card ID inválido');
   }
 
   const card = await Card.findById(cardId);
   if (!card) {
-    return { allowed: false, card: null, status: 404, error: 'Card não encontrado' };
+    throw new NotFoundError('Card não encontrado');
   }
 
   const board = await Board.findById(card.boardId).select('members').lean();
   if (!board) {
-    return { allowed: false, card: null, status: 404, error: 'Board não encontrado' };
+    throw new NotFoundError('Board não encontrado');
   }
 
   const isMember = board.members.some((m) => m.toString() === userId);
   if (!isMember) {
     logger.warn('Card access denied', { userId, cardId, boardId: card.boardId.toString() });
-    return { allowed: false, card: null, status: 403, error: 'Acesso negado a este board' };
+    throw new ForbiddenError('Acesso negado a este board');
   }
 
-  return { allowed: true, card, status: 200 };
+  return card;
 };
 
-export const createCard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { boardId, columnId, title, description, labels, priority } = req.body;
+// FIX #5: Controllers usam throw + asyncHandler — sem try/catch repetido
 
-    // Autorização já verificada pelo middleware requireBoardAccess('body.boardId')
+export const createCard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { boardId, columnId, title, description, labels, priority } = req.body;
 
-    const board = await Board.findById(boardId);
-    if (!board) {
-      res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
+  // Autorização já verificada pelo middleware requireBoardAccess('body.boardId')
 
-    const maxOrder = await Card.findOne({ boardId, columnId })
-      .sort({ order: -1 })
-      .select('order');
-
-    const card = await Card.create({
-      boardId,
-      columnId,
-      title,
-      description: description || '',
-      labels: labels || [],
-      priority: priority || 'medium',
-      order: maxOrder ? maxOrder.order + 1 : 0,
-    });
-
-    const populated = await Card.findById(card._id).populate('assignees', 'name email avatar');
-    res.status(201).json(populated);
-  } catch (error) {
-    logger.error('Create card error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao criar card' });
+  const board = await Board.findById(boardId);
+  if (!board) {
+    throw new NotFoundError('Board não encontrado');
   }
-};
 
-export const updateCard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const cardId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const access = await assertCardAccess(cardId, req.userId!);
-    if (!access.allowed) {
-      res.status(access.status).json({ error: access.error });
-      return;
-    }
+  const maxOrder = await Card.findOne({ boardId, columnId })
+    .sort({ order: -1 })
+    .select('order');
 
-    const { title, description, labels, priority, dueDate, assignees } = req.body;
-    const card = await Card.findByIdAndUpdate(
-      cardId,
-      { title, description, labels, priority, dueDate, assignees },
-      { new: true, runValidators: true }
-    ).populate('assignees', 'name email avatar');
+  const card = await Card.create({
+    boardId,
+    columnId,
+    title,
+    description: description || '',
+    labels: labels || [],
+    priority: priority || 'medium',
+    order: maxOrder ? maxOrder.order + 1 : 0,
+  });
 
-    if (!card) {
-      res.status(404).json({ error: 'Card não encontrado' });
-      return;
-    }
+  const populated = await Card.findById(card._id).populate('assignees', 'name email avatar');
+  res.status(201).json(populated);
+});
 
-    res.json(card);
-  } catch (error) {
-    logger.error('Update card error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao atualizar card' });
+export const updateCard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const cardId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  await assertCardAccess(cardId, req.userId!);
+
+  const { title, description, labels, priority, dueDate, assignees } = req.body;
+  const card = await Card.findByIdAndUpdate(
+    cardId,
+    { title, description, labels, priority, dueDate, assignees },
+    { new: true, runValidators: true }
+  ).populate('assignees', 'name email avatar');
+
+  if (!card) {
+    throw new NotFoundError('Card não encontrado');
   }
-};
 
-export const moveCard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const cardId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const access = await assertCardAccess(cardId, req.userId!);
-    if (!access.allowed) {
-      res.status(access.status).json({ error: access.error });
-      return;
-    }
+  res.json(card);
+});
 
-    const { columnId, order } = req.body;
-    const card = await Card.findByIdAndUpdate(
-      cardId,
-      { columnId, order },
-      { new: true }
-    ).populate('assignees', 'name email avatar');
+export const moveCard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const cardId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  await assertCardAccess(cardId, req.userId!);
 
-    if (!card) {
-      res.status(404).json({ error: 'Card não encontrado' });
-      return;
-    }
+  const { columnId, order } = req.body;
+  const card = await Card.findByIdAndUpdate(
+    cardId,
+    { columnId, order },
+    { new: true }
+  ).populate('assignees', 'name email avatar');
 
-    res.json(card);
-  } catch (error) {
-    logger.error('Move card error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao mover card' });
+  if (!card) {
+    throw new NotFoundError('Card não encontrado');
   }
-};
 
-export const deleteCard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const cardId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const access = await assertCardAccess(cardId, req.userId!);
-    if (!access.allowed) {
-      res.status(access.status).json({ error: access.error });
-      return;
-    }
+  res.json(card);
+});
 
-    const card = await Card.findByIdAndDelete(cardId);
-    if (!card) {
-      res.status(404).json({ error: 'Card não encontrado' });
-      return;
-    }
+export const deleteCard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const cardId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  await assertCardAccess(cardId, req.userId!);
 
-    res.json({ message: 'Card deletado com sucesso' });
-  } catch (error) {
-    logger.error('Delete card error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao deletar card' });
+  const card = await Card.findByIdAndDelete(cardId);
+  if (!card) {
+    throw new NotFoundError('Card não encontrado');
   }
-};
+
+  res.json({ message: 'Card deletado com sucesso' });
+});

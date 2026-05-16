@@ -18,10 +18,21 @@ const LOCKOUT_MINUTES = 15;
 const LOCKOUT_MS = LOCKOUT_MINUTES * 60 * 1000;
 
 const generateAccessToken = (userId: string): string =>
-  jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: ACCESS_TTL });
+  jwt.sign({ userId }, process.env.JWT_SECRET!, {
+    expiresIn: ACCESS_TTL,
+    algorithm: 'HS256',
+    issuer: 'flowsnyker',
+    audience: 'flowsnyker-app',
+  });
 
 const hashToken = (token: string): string =>
   crypto.createHash('sha256').update(token).digest('hex');
+
+// FIX #4: Comparação tempo-constante para tokens — previne timing attacks
+const safeEqual = (a: string, b: string): boolean => {
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+};
 
 const issueRefreshToken = async (userId: string, family?: string): Promise<string> => {
   const raw = crypto.randomBytes(48).toString('hex');
@@ -159,7 +170,7 @@ export const refresh = async (req: Request, res: Response): Promise<void> => {
     const [family, secret] = raw.split('.');
     const stored = await RefreshToken.findOne({ tokenHash: hashToken(secret) });
 
-    if (!stored || stored.family !== family) {
+    if (!stored || !safeEqual(stored.family, family)) {
       res.status(401).json({ error: 'Refresh token inválido' });
       return;
     }

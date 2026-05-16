@@ -30,8 +30,17 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     }
 
     try {
-      // JWT_SECRET já validado no boot (fail-fast em server.ts)
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+      // FIX #2: Allowlist de algoritmos + issuer/audience
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!, {
+        algorithms: ['HS256'],
+        issuer: 'flowsnyker',
+        audience: 'flowsnyker-app',
+      }) as { userId: string };
+
+      if (!decoded.userId || typeof decoded.userId !== 'string') {
+        return next(new Error('Invalid token payload'));
+      }
+
       (socket as any).userId = decoded.userId;
       next();
     } catch (error) {
@@ -39,50 +48,39 @@ export const initializeSocket = (httpServer: HttpServer): SocketServer => {
     }
   });
 
-  // Rate limiting per socket (max 30 events/sec)
-  const eventCounts = new Map<string, { count: number; resetTime: number }>();
-
   io.on('connection', (socket) => {
     logger.info('Socket connected', { socketId: socket.id });
 
-    // Simple rate limiting
-    const originalOn = socket.on.bind(socket);
-    socket.on = ((event: string, ...args: any[]) => {
-      if (!['disconnect', 'error'].includes(event)) {
-        const wrappedHandler = (...handlerArgs: any[]) => {
-          const now = Date.now();
-          const key = socket.id;
-          const entry = eventCounts.get(key) || { count: 0, resetTime: now + 1000 };
+    // FIX #3: Rate limit via middleware oficial — roda ANTES de cada event handler
+    const eventTimestamps: number[] = [];
+    const RATE_LIMIT = 30; // eventos por segundo
+    const WINDOW_MS = 1000;
 
-          if (now > entry.resetTime) {
-            entry.count = 0;
-            entry.resetTime = now + 1000;
-          }
-
-          entry.count++;
-          eventCounts.set(key, entry);
-
-          if (entry.count > 30) {
-            socket.emit('error', { message: 'Rate limit exceeded' });
-            return;
-          }
-
-          const handler = args[args.length - 1];
-          if (typeof handler === 'function') {
-            handler(...handlerArgs);
-          }
-        };
-        return originalOn(event, wrappedHandler);
+    socket.use((packet, next) => {
+      const now = Date.now();
+      // Remover timestamps fora da janela
+      while (eventTimestamps.length > 0 && eventTimestamps[0] < now - WINDOW_MS) {
+        eventTimestamps.shift();
       }
-      return originalOn(event as any, ...(args as [any]));
-    }) as any;
+
+      if (eventTimestamps.length >= RATE_LIMIT) {
+        logger.warn('Socket rate limit exceeded', {
+          socketId: socket.id,
+          userId: (socket as any).userId,
+          event: packet[0],
+        });
+        return next(new Error('Rate limit exceeded'));
+      }
+
+      eventTimestamps.push(now);
+      next();
+    });
 
     // Register event handlers
     registerPresenceEvents(io, socket);
     registerBoardEvents(io, socket);
 
     socket.on('disconnect', () => {
-      eventCounts.delete(socket.id);
       logger.info('Socket disconnected', { socketId: socket.id });
     });
   });

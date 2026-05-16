@@ -1,18 +1,15 @@
 import { Server as SocketServer, Socket } from 'socket.io';
 import { z } from 'zod';
 import Board from '../models/Board';
+import User from '../models/User';
 import { logger } from '../utils/logger';
 
-// ─── Zod Schemas (Item 4 — validação de payload nos sockets) ────
+// ─── Zod Schemas ─────────────────────────────────────────────────
 const objectId = z.string().regex(/^[a-f0-9]{24}$/);
 
+// FIX #1: NÃO aceitar `user` do cliente — identidade vem do JWT handshake
 const boardJoinSchema = z.object({
   boardId: objectId,
-  user: z.object({
-    _id: objectId,
-    name: z.string().min(1),
-    avatar: z.string(),
-  }),
 });
 
 const boardLeaveSchema = z.object({
@@ -36,9 +33,8 @@ interface OnlineUser {
 const boardRooms = new Map<string, Map<string, OnlineUser>>();
 
 export const registerPresenceEvents = (io: SocketServer, socket: Socket) => {
-  // ── Item 3: User joins a board room — VALIDAÇÃO DE MEMBERSHIP ──
+  // ── FIX #1: Identidade vem EXCLUSIVAMENTE do handshake (JWT) ──
   socket.on('board:join', async (payload: unknown) => {
-    // Validar payload com Zod
     const result = boardJoinSchema.safeParse(payload);
     if (!result.success) {
       logger.warn('Socket board:join validation failed', { errors: result.error.flatten().fieldErrors });
@@ -46,44 +42,58 @@ export const registerPresenceEvents = (io: SocketServer, socket: Socket) => {
       return;
     }
 
-    const { boardId, user } = result.data;
+    const { boardId } = result.data;
 
-    // ── VERIFICAÇÃO DE MEMBERSHIP ANTES DE JOIN ──
+    // Identidade vem do JWT handshake — NUNCA do payload
+    const userId = (socket as any).userId as string | undefined;
+    if (!userId) {
+      socket.emit('error', { message: 'Autenticação necessária' });
+      return;
+    }
+
+    // Verificar membership usando userId autenticado
     const board = await Board.findById(boardId).select('members').lean();
     if (!board) {
       socket.emit('error', { message: 'Board não encontrado' });
       return;
     }
 
-    const isMember = board.members.some((m) => m.toString() === user._id);
+    const isMember = board.members.some((m) => m.toString() === userId);
     if (!isMember) {
-      logger.warn('Socket board:join denied — not a member', { userId: user._id, boardId });
+      logger.warn('Socket board:join denied — not a member', { userId, boardId });
       socket.emit('error', { message: 'Acesso negado a este board' });
       return;
     }
 
-    // ── Membership confirmada — entrar na room ──
+    // Buscar nome e avatar do BANCO, nunca aceitar do cliente
+    const userDoc = await User.findById(userId).select('name avatar').lean();
+    if (!userDoc) {
+      socket.emit('error', { message: 'Usuário não encontrado' });
+      return;
+    }
+
+    // Membership confirmada, dados do banco — entrar na room
     socket.join(boardId);
     (socket as any).currentBoard = boardId;
-    (socket as any).userId = user._id;
+    // NÃO sobrescrever socket.userId — já está correto desde o handshake
 
     if (!boardRooms.has(boardId)) {
       boardRooms.set(boardId, new Map());
     }
 
     const room = boardRooms.get(boardId)!;
-    room.set(user._id, {
+    room.set(userId, {
       socketId: socket.id,
-      userId: user._id,
-      name: user.name,
-      avatar: user.avatar,
+      userId,
+      name: userDoc.name,
+      avatar: userDoc.avatar || '',
     });
 
     // Broadcast updated online users to everyone in the room
     const onlineUsers = Array.from(room.values());
     io.to(boardId).emit('presence:update', { users: onlineUsers });
 
-    logger.info('User joined board', { userId: user._id, boardId, onlineCount: onlineUsers.length });
+    logger.info('User joined board', { userId, boardId, onlineCount: onlineUsers.length });
   });
 
   // User leaves a board room
@@ -129,7 +139,7 @@ export const registerPresenceEvents = (io: SocketServer, socket: Socket) => {
     }
   });
 
-  // Cursor movement (Phase 2 prep, but we can register the event now)
+  // Cursor movement
   socket.on('cursor:move', (payload: unknown) => {
     const result = cursorMoveSchema.safeParse(payload);
     if (!result.success) return;

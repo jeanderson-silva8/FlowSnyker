@@ -30,7 +30,7 @@ Garantir a persistência da conexão em tempo real (WebSockets) numa arquitetura
 No FlowSnyker, a colaboração em tempo real não compromete o isolamento de dados sensíveis. Para garantir isso, a arquitetura de compartilhamento segue um **Protocolo Estrito de Autorização**:
 
 1. **Proteção de Link (Share Bypass Prevention):** O botão "Compartilhar" gera um acesso rápido via URL (Deep Link), mas **o link em si não concede permissão mágica**. Se um usuário não autorizado colar o link `/board/123` no navegador, o middleware do Node.js bloqueia o acesso via validação JWT combinada com a verificação de propriedade do quadro, retornando um erro `403 Forbidden` absoluto.
-2. **Convite Autorizado (O Único Caminho):** A única forma de ingresso no Kanban é através da funcionalidade "Convidar". O sistema requer que um membro digite o e-mail do colaborador desejado. O Backend então faz um elo criptográfico no banco de dados, injetando o ID do usuário no array de `members` do quadro. 
+2. **Convite Autorizado (O Único Caminho):** A única forma de ingresso no Kanban é através da funcionalidade "Convidar". O sistema requer que um membro digite o e-mail do colaborador desejado. O Backend valida que o convidador é membro do board (via `requireBoardAccess`), busca o usuário convidado pelo email, e adiciona o ID dele ao array `members` do board. Toda operação subsequente revalida membership via middleware, então o acesso pode ser revogado removendo o ID do array.
 3. **Fluxo de Acesso Controlado:** Se o colaborador clicar no link recebido sem estar logado, a plataforma intercepta a rota via `PrivateRoute` no React e exige o login (garantindo que ele não caia direto no quadro sem sessão). Após o login, a API valida em tempo real se aquele usuário recém-logado possui a credencial daquele `boardId`, concedendo então o acesso simultâneo ao WebSocket.
 
 ---
@@ -143,6 +143,14 @@ npm run type-check  # Type-check completo sem emitir
 > Para detalhes técnicos, veja [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ---
+
+## 📐 Decisões Arquiteturais (Trade-offs)
+
+- **JWT em vez de sessão server-side**: escolhido para escalabilidade horizontal (sem sticky session). Trade-off: revogação não é instantânea (mitigado com access token curto de 15min + refresh rotativo com detecção de reuso).
+- **MongoDB em vez de PostgreSQL**: dados não-relacionais (boards são objetos auto-contidos). Trade-off: transações multi-documento mais limitadas (não usadas no escopo atual).
+- **Socket.io em vez de WebSocket nativo**: fallback automático para polling e reconnect built-in. Trade-off: payload ligeiramente maior.
+- **Argon2id em vez de bcrypt**: padrão moderno (OWASP 2024+). Trade-off: dependência native (`@node-rs/argon2`). Mantemos compatibilidade retroativa com bcrypt para usuários existentes via migração transparente no login.
+- **WAF custom no Express em vez de Cloudflare**: zero custo, controle total sobre regras. Trade-off: cobre menos vetores que solução comercial; planejado migrar quando o projeto escalar.
 
 ## 👑 Autor
 

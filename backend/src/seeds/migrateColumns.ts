@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import connectDB from '../config/db';
 import Board from '../models/Board';
+import { logger } from '../utils/logger';
 
 dotenv.config();
 
@@ -16,7 +17,7 @@ const migrate = async () => {
   await connectDB();
 
   const boards = await Board.find({});
-  console.log(`Found ${boards.length} board(s).`);
+  logger.info(`Found ${boards.length} board(s).`);
 
   let updated = 0;
 
@@ -40,21 +41,21 @@ const migrate = async () => {
       for (const col of overflow) {
         await Card.updateMany({ columnId: col._id }, { $set: { columnId: lastId } });
       }
-      console.log(`  · Board "${board.title}": collapsed ${overflow.length} extra column(s) into Concluído`);
+      logger.info(`  · Board "${board.title}": collapsed ${overflow.length} extra column(s) into Concluído`);
     }
 
     board.columns = newColumns as typeof board.columns;
     await board.save();
     updated++;
-    console.log(`✓ Updated board: "${board.title}" (${board._id})`);
+    logger.info(`✓ Updated board: "${board.title}" (${board._id})`);
   }
 
-  console.log(`\nDone. ${updated} board(s) migrated.`);
+  logger.info(`Done. ${updated} board(s) migrated.`);
   await mongoose.disconnect();
   process.exit(0);
 };
 
 migrate().catch((err) => {
-  console.error('Migration failed:', err);
+  logger.error('Migration failed', { error: (err as Error).message });
   process.exit(1);
 });

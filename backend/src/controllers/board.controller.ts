@@ -4,164 +4,131 @@ import Board from '../models/Board';
 import Card from '../models/Card';
 import { AuthRequest } from '../middleware/auth';
 import { logger } from '../utils/logger';
+import { asyncHandler } from '../utils/asyncHandler';
+import { NotFoundError, BadRequestError } from '../utils/errors';
 
-export const createBoard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const { title } = req.body;
+// FIX #5: Controllers usam throw + asyncHandler — sem try/catch repetido
 
-    const board = await Board.create({
-      title,
-      owner: req.userId,
-      members: [req.userId],
-      columns: [
-        { _id: new mongoose.Types.ObjectId().toString(), title: '📋 Tarefas', order: 0 },
-        { _id: new mongoose.Types.ObjectId().toString(), title: '🔨 Em Progresso', order: 1 },
-        { _id: new mongoose.Types.ObjectId().toString(), title: '👀 Revisão', order: 2 },
-        { _id: new mongoose.Types.ObjectId().toString(), title: '✅ Concluído', order: 3 },
-      ],
-    });
+export const createBoard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const { title } = req.body;
 
-    const populated = await Board.findById(board._id)
-      .populate('owner', 'name email avatar')
-      .populate('members', 'name email avatar');
+  const board = await Board.create({
+    title,
+    owner: req.userId,
+    members: [req.userId],
+    columns: [
+      { _id: new mongoose.Types.ObjectId().toString(), title: '📋 Tarefas', order: 0 },
+      { _id: new mongoose.Types.ObjectId().toString(), title: '🔨 Em Progresso', order: 1 },
+      { _id: new mongoose.Types.ObjectId().toString(), title: '👀 Revisão', order: 2 },
+      { _id: new mongoose.Types.ObjectId().toString(), title: '✅ Concluído', order: 3 },
+    ],
+  });
 
-    res.status(201).json(populated);
-  } catch (error) {
-    logger.error('Create board error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao criar board' });
+  const populated = await Board.findById(board._id)
+    .populate('owner', 'name email avatar')
+    .populate('members', 'name email avatar');
+
+  res.status(201).json(populated);
+});
+
+export const getBoards = asyncHandler(async (req: AuthRequest, res: Response) => {
+  const boards = await Board.find({ members: req.userId })
+    .populate('owner', 'name email avatar')
+    .populate('members', 'name email avatar')
+    .sort({ updatedAt: -1 });
+
+  // Item 15: Resolver N+1 — uma única aggregate ao invés de N countDocuments
+  const boardIds = boards.map((b) => b._id);
+  const cardCounts = await Card.aggregate([
+    { $match: { boardId: { $in: boardIds } } },
+    { $group: { _id: '$boardId', count: { $sum: 1 } } },
+  ]);
+
+  const countMap = new Map(
+    cardCounts.map((c) => [c._id.toString(), c.count as number])
+  );
+
+  const boardsWithCounts = boards.map((board) => ({
+    ...board.toObject(),
+    cardCount: countMap.get(board._id.toString()) || 0,
+  }));
+
+  res.json(boardsWithCounts);
+});
+
+export const getBoard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Autorização já verificada pelo middleware requireBoardAccess('params.id')
+  const board = await Board.findById(req.params.id)
+    .populate('owner', 'name email avatar')
+    .populate('members', 'name email avatar');
+
+  if (!board) {
+    throw new NotFoundError('Board não encontrado');
   }
-};
 
-export const getBoards = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    const boards = await Board.find({ members: req.userId })
-      .populate('owner', 'name email avatar')
-      .populate('members', 'name email avatar')
-      .sort({ updatedAt: -1 });
+  const cards = await Card.find({ boardId: board._id })
+    .populate('assignees', 'name email avatar')
+    .sort({ order: 1 });
 
-    // Item 15: Resolver N+1 — uma única aggregate ao invés de N countDocuments
-    const boardIds = boards.map((b) => b._id);
-    const cardCounts = await Card.aggregate([
-      { $match: { boardId: { $in: boardIds } } },
-      { $group: { _id: '$boardId', count: { $sum: 1 } } },
-    ]);
+  res.json({ board, cards });
+});
 
-    const countMap = new Map(
-      cardCounts.map((c) => [c._id.toString(), c.count as number])
-    );
-
-    const boardsWithCounts = boards.map((board) => ({
-      ...board.toObject(),
-      cardCount: countMap.get(board._id.toString()) || 0,
-    }));
-
-    res.json(boardsWithCounts);
-  } catch (error) {
-    logger.error('Get boards error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao buscar boards' });
+export const updateBoard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Autorização de owner já verificada pelo middleware requireBoardOwner('params.id')
+  const board = await Board.findById(req.params.id);
+  if (!board) {
+    throw new NotFoundError('Board não encontrado');
   }
-};
 
-export const getBoard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    // Autorização já verificada pelo middleware requireBoardAccess('params.id')
-    const board = await Board.findById(req.params.id)
-      .populate('owner', 'name email avatar')
-      .populate('members', 'name email avatar');
+  const { title, columns } = req.body;
+  if (title) board.title = title;
+  if (columns) board.columns = columns;
+  await board.save();
 
-    if (!board) {
-      res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
+  res.json(board);
+});
 
-    const cards = await Card.find({ boardId: board._id })
-      .populate('assignees', 'name email avatar')
-      .sort({ order: 1 });
-
-    res.json({ board, cards });
-  } catch (error) {
-    logger.error('Get board error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao buscar board' });
+export const deleteBoard = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Autorização de owner já verificada pelo middleware requireBoardOwner('params.id')
+  const board = await Board.findById(req.params.id);
+  if (!board) {
+    throw new NotFoundError('Board não encontrado');
   }
-};
 
-export const updateBoard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    // Autorização de owner já verificada pelo middleware requireBoardOwner('params.id')
-    const board = await Board.findById(req.params.id);
-    if (!board) {
-      res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
+  await Card.deleteMany({ boardId: board._id });
+  await Board.findByIdAndDelete(board._id);
 
-    const { title, columns } = req.body;
-    if (title) board.title = title;
-    if (columns) board.columns = columns;
-    await board.save();
+  res.json({ message: 'Board deletado com sucesso' });
+});
 
-    res.json(board);
-  } catch (error) {
-    logger.error('Update board error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao atualizar board' });
+export const inviteMember = asyncHandler(async (req: AuthRequest, res: Response) => {
+  // Item 6: Autorização já verificada pelo middleware requireBoardAccess('params.id')
+  const { email } = req.body;
+  const board = await Board.findById(req.params.id);
+
+  if (!board) {
+    throw new NotFoundError('Board não encontrado');
   }
-};
 
-export const deleteBoard = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    // Autorização de owner já verificada pelo middleware requireBoardOwner('params.id')
-    const board = await Board.findById(req.params.id);
-    if (!board) {
-      res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
-
-    await Card.deleteMany({ boardId: board._id });
-    await Board.findByIdAndDelete(board._id);
-
-    res.json({ message: 'Board deletado com sucesso' });
-  } catch (error) {
-    logger.error('Delete board error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao deletar board' });
+  const User = mongoose.model('User');
+  const userToInvite = await User.findOne({ email });
+  if (!userToInvite) {
+    throw new NotFoundError('Usuário não encontrado com este email');
   }
-};
 
-export const inviteMember = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    // Item 6: Autorização já verificada pelo middleware requireBoardAccess('params.id')
-    // Apenas membros existentes podem convidar novos membros.
-    const { email } = req.body;
-    const board = await Board.findById(req.params.id);
-
-    if (!board) {
-      res.status(404).json({ error: 'Board não encontrado' });
-      return;
-    }
-
-    const User = mongoose.model('User');
-    const userToInvite = await User.findOne({ email });
-    if (!userToInvite) {
-      res.status(404).json({ error: 'Usuário não encontrado com este email' });
-      return;
-    }
-
-    const alreadyMember = board.members.some(
-      (m) => m.toString() === userToInvite._id.toString()
-    );
-    if (alreadyMember) {
-      res.status(400).json({ error: 'Usuário já é membro deste board' });
-      return;
-    }
-
-    board.members.push(userToInvite._id as mongoose.Types.ObjectId);
-    await board.save();
-
-    const populated = await Board.findById(board._id)
-      .populate('owner', 'name email avatar')
-      .populate('members', 'name email avatar');
-
-    res.json(populated);
-  } catch (error) {
-    logger.error('Invite member error', { error: (error as Error).message });
-    res.status(500).json({ error: 'Erro ao convidar membro' });
+  const alreadyMember = board.members.some(
+    (m) => m.toString() === userToInvite._id.toString()
+  );
+  if (alreadyMember) {
+    throw new BadRequestError('Usuário já é membro deste board');
   }
-};
+
+  board.members.push(userToInvite._id as mongoose.Types.ObjectId);
+  await board.save();
+
+  const populated = await Board.findById(board._id)
+    .populate('owner', 'name email avatar')
+    .populate('members', 'name email avatar');
+
+  res.json(populated);
+});
