@@ -72,7 +72,7 @@ npm run type-check  # Type-check completo sem emitir
 | **CSRF** | Origin validation no refresh | ✅ |
 | **Logging** | Estruturado com redação de dados sensíveis + Correlation ID | ✅ |
 
-**O que NÃO está implementado (transparência):**
+**O que NÃO está implementado:**
 - MFA/2FA
 - Audit log persistente (logs vão para stdout)
 - Encryption at rest customizado (usa MongoDB Atlas default)
