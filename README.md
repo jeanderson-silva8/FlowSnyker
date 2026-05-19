@@ -57,7 +57,10 @@ npm run type-check  # Type-check completo sem emitir
 
 ---
 
-## 🔒 Segurança
+<a id="seg-camadas"></a>
+## 🔒 Segurança — camadas e status
+
+> *Tabela scannável: o que existe em cada camada, com âncora no código. Para o **encadeamento** específico de auth + sockets (como `socket.userId` no handshake e validação por handler trabalham juntos contra IDOR via WebSocket), ver a seção [Arquitetura de Auth + WebSocket](#arq-auth-ws) abaixo.*
 
 | Camada | Implementação | Status |
 |--------|---------------|:------:|
@@ -92,13 +95,25 @@ npm run type-check  # Type-check completo sem emitir
 
 ---
 
-## 🔒 Arquitetura de Convites e Compartilhamento Seguro
+<a id="arq-auth-ws"></a>
+## 🔒 Arquitetura de Auth + WebSocket — como o fluxo resiste a IDOR, spoofing de identidade e bypass de convite (o porquê e o encadeamento)
 
-No FlowSnyker, a colaboração em tempo real não compromete o isolamento de dados sensíveis. Para garantir isso, a arquitetura de compartilhamento segue um **Protocolo Estrito de Autorização**:
+> *Deep-dive narrativo: por que cada peça existe e como elas se encadeiam. A tabela [Segurança — camadas e status](#seg-camadas) acima lista o **que** existe; esta seção explica **por que** assim — especialmente sobre o vetor mais sutil de IDOR via WebSocket que a auditoria v2 identificou.*
 
-1. **Proteção de Link (Share Bypass Prevention):** O botão "Compartilhar" gera um acesso rápido via URL (Deep Link), mas **o link em si não concede permissão mágica**. Se um usuário não autorizado colar o link `/board/123` no navegador, o middleware do Node.js bloqueia o acesso via validação JWT combinada com a verificação de propriedade do quadro, retornando um erro `403 Forbidden` absoluto.
-2. **Convite Autorizado (O Único Caminho):** A única forma de ingresso no Kanban é através da funcionalidade "Convidar". O sistema requer que um membro digite o e-mail do colaborador desejado. O Backend valida que o convidador é membro do board (via `requireBoardAccess`), busca o usuário convidado pelo email, e adiciona o ID dele ao array `members` do board. Toda operação subsequente revalida membership via middleware, então o acesso pode ser revogado removendo o ID do array.
-3. **Fluxo de Acesso Controlado:** Se o colaborador clicar no link recebido sem estar logado, a plataforma intercepta a rota via `PrivateRoute` no React e exige o login (garantindo que ele não caia direto no quadro sem sessão). Após o login, a API valida em tempo real se aquele usuário recém-logado possui a credencial daquele `boardId`, concedendo então o acesso simultâneo ao WebSocket.
+No FlowSnyker, a colaboração em tempo real exige cuidado redobrado: cada movimentação de card pode envolver 3 superfícies diferentes (HTTP, handshake de socket, evento de socket subsequente) e o atacante precisa ser bloqueado nas três. Por isso a arquitetura segue um protocolo de auth em **6 etapas encadeadas**:
+
+1. **Hash de senha resistente:** Argon2id (padrão OWASP 2024+) com `memoryCost`/`timeCost` calibrados; migração transparente de bcrypt no primeiro login pós-deploy. Brute force offline contra dump de senha custa caro o suficiente pra não compensar.
+2. **JWT curto + Refresh Token Rotation com detecção de reuso:** access token de 15min vive em memória React (não `localStorage`). Cada refresh consome o token atual e emite um novo na mesma `familyId`. Se um refresh já revogado for tentado de novo (= sinal de roubo de cookie), **toda a família é revogada** e o usuário precisa relogar. Account lockout adicional após 5 tentativas de login/15min.
+3. **Cookie de refresh blindado:** `httpOnly` + `secure` (prod) + `sameSite=strict` + `path=/auth` + `maxAge=7d`. Não acessível via JS; não enviado em cross-site; escopado só à rota `/auth`. Combinado com validação de `Origin` no `/refresh`, fecha CSRF.
+4. **Autorização granular em TODA rota HTTP:** `requireBoardAccess` middleware valida membership do `boardId` ANTES de qualquer operação. Link `/board/123` colado no navegador por usuário não-autorizado retorna `403 Forbidden`. Link em si **não concede permissão mágica** — JWT + membership são revalidados a cada request.
+5. **Handshake de socket autenticado (e imutável):** quando o cliente conecta no `io.connection`, o middleware `io.use(authenticateSocket)` valida o JWT e seta `socket.userId = decoded.userId` UMA ÚNICA VEZ. **Esse `socket.userId` é IMUTÁVEL após o handshake** — auditoria v2 identificou que o handler `presenceEvents.ts` antigo aceitava `user._id` do payload e sobrescrevia `socket.userId`, permitindo IDOR via WebSocket onde atacante se passava por terceiros. **Correção aplicada:** `socket.userId` só é setado no handshake; nunca sobrescrito por payload de cliente em handler subsequente. Dados adicionais do usuário (nome, avatar) são buscados do banco usando o `userId` do handshake — nunca aceitos do cliente.
+6. **Autorização em cada event handler de socket:** mesmo que o socket esteja autenticado, cada evento (`card:move`, `board:join`, etc.) revalida que `socket.userId` tem acesso ao `boardId` do payload. Autenticar UMA VEZ no handshake **não é suficiente** — handler deve sempre verificar autorização ao recurso específico que está sendo manipulado.
+
+**Convite como único caminho de ingresso:** a única forma de virar membro de um board é via "Convidar" — um membro existente digita o email do colaborador, backend valida que o convidador é membro (via `requireBoardAccess`), busca o usuário convidado pelo email, e adiciona o `userId` ao array `members` do board. Acesso revogável a qualquer momento removendo o ID do array; toda operação subsequente revalida membership via middleware.
+
+**Fluxo de acesso controlado no frontend:** se o colaborador clicar num link de board sem estar logado, `PrivateRoute` no React intercepta e exige login antes. Após autenticar, API valida em tempo real se o `userId` recém-autenticado tem credencial pro `boardId` — só então o socket abre com `socket.userId` correto.
+
+> **Lição meta (auditoria v2):** autorização correta em ESTRUTURA (item A3 — room control) não basta. Precisa também garantir que a FONTE DE VERDADE da identidade vem do handshake autenticado, não do payload do evento. Auditoria FlowSnyker v2 originou os itens **3B** e **A2B** do checklist universal exatamente por causa desse vetor sutil.
 
 ---
 
