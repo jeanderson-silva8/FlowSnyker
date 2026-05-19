@@ -45,17 +45,17 @@ git push -u origin main
 3. **Framework Preset**: Vite (autodetectado)
 4. Em **Environment Variables**, adicione:
    - `VITE_API_URL` = `https://flowsnyker-api.onrender.com/api` (URL do Render + `/api`)
-5. Deploy → anote a URL (ex.: `https://flowsnyker.vercel.app`)
+5. Deploy → anote a URL (ex.: `https://flow-snyker.vercel.app`)
 
 ## 5. Ajuste final do CORS
 
 Volte no Render → seu serviço → **Environment** → edite `CLIENT_URL` com a URL do Vercel:
 ```
-CLIENT_URL=https://flowsnyker.vercel.app
+CLIENT_URL=https://flow-snyker.vercel.app
 ```
 Suporta múltiplas origens separadas por vírgula:
 ```
-CLIENT_URL=http://localhost:5173,https://flowsnyker.vercel.app
+CLIENT_URL=http://localhost:5173,https://flow-snyker.vercel.app
 ```
 O Render redeploya automaticamente.
 

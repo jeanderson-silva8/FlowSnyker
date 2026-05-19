@@ -5,7 +5,7 @@
 
 ![CI](https://github.com/jeanderson-silva8/FlowSnyker/actions/workflows/ci.yml/badge.svg)
 
-🟢 **LIVE DEMO**: [Acesse o FlowSnyker Ao Vivo Aqui](#)
+🟢 **LIVE DEMO**: [Acesse o FlowSnyker Ao Vivo Aqui](https://flow-snyker.vercel.app/)
 🛡️ **Auditoria Enterprise:** [Veja a Auditoria de Segurança Aplicada a Este Projeto](docs/AUDIT_REPORT_2026-05-16.md)
 
 ---
