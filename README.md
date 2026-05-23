@@ -147,6 +147,64 @@ No FlowSnyker, a colaboração em tempo real exige cuidado redobrado: cada movim
 ```
 ---
 
+## 🚀 Como Executar Localmente
+
+### Requisitos
+- Node.js 20+
+- npm 10+
+- MongoDB instalado localmente ou uma conta no MongoDB Atlas
+
+### Variáveis de ambiente
+
+Crie um `.env` na pasta `backend` a partir do `.env.example` existente na raiz do projeto:
+
+```dotenv
+# MongoDB Atlas
+MONGODB_URI=sua_uri_do_mongodb_aqui
+
+# JWT
+JWT_SECRET=sua_chave_secreta_jwt
+JWT_REFRESH_SECRET=sua_chave_secreta_refresh_jwt
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=7d
+
+# Server
+PORT=5000
+NODE_ENV=development
+
+# Frontend URL (CORS)
+CLIENT_URL=http://localhost:5173
+```
+
+⚠️ **Nunca commite o `.env`.** Mantenha suas chaves e segredos em segurança fora do controle de versão.
+
+### Rodando
+
+Abra dois terminais na raiz do projeto para rodar o backend e o frontend simultaneamente:
+
+**Terminal 1 (Backend):**
+```bash
+cd backend
+npm install
+npm run dev     # backend executando em http://localhost:5000
+```
+
+**Terminal 2 (Frontend):**
+```bash
+cd frontend
+npm install
+npm run dev     # frontend Vite executando em http://localhost:5173
+```
+
+### Testes
+
+Para rodar os testes automatizados do backend:
+
+```bash
+cd backend
+npm run test    # executa vitest run
+```
+
 ## 👑 Autor
 
 **Jeanderson Silva** 🤓✍️
