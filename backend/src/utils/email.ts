@@ -1,19 +1,26 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { logger } from './logger';
 
 // ═══════════════════════════════════════════════════════
-// 📧 Gmail SMTP via Nodemailer
-// Modelo adaptado do Projeto Dashboard - FULL
-// Usa "Senha de App" do Google (EMAIL_PASS)
+// 📧 Sistema de Email Híbrido:
+// 1️⃣ Gmail SMTP via Nodemailer (local / servidores que permitem SMTP)
+// 2️⃣ Resend API via HTTPS (fallback para Render Free Tier que bloqueia SMTP)
 // ═══════════════════════════════════════════════════════
 
-const transporter = nodemailer.createTransport({
+// --- Gmail SMTP (primário) ---
+const gmailTransporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  connectionTimeout: 8000,  // 8s para conectar
+  socketTimeout: 10000,     // 10s para resposta
 });
+
+// --- Resend API (fallback) ---
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 
 interface SendResetEmailParams {
   to: string;
@@ -22,23 +29,57 @@ interface SendResetEmailParams {
 }
 
 export const sendPasswordResetEmail = async ({ to, resetUrl, userName }: SendResetEmailParams): Promise<boolean> => {
-  try {
-    const mailOptions = {
-      from: `"FlowSnyker Suporte" <${process.env.EMAIL_USER}>`,
-      to,
-      subject: '🔑 Recuperação de Senha — FlowSnyker',
-      html: buildResetEmailHTML(resetUrl, userName),
-    };
+  const html = buildResetEmailHTML(resetUrl, userName);
 
-    // [SEGURANÇA] Envio assíncrono — se falhar, loga o erro mas não trava a resposta
-    const info = await transporter.sendMail(mailOptions);
+  // 1️⃣ Tenta Gmail SMTP primeiro
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    try {
+      const info = await gmailTransporter.sendMail({
+        from: `"FlowSnyker Suporte" <${process.env.EMAIL_USER}>`,
+        to,
+        subject: '🔑 Recuperação de Senha — FlowSnyker',
+        html,
+      });
 
-    logger.info('Password reset email sent via Gmail SMTP', { to, messageId: info.messageId });
-    return true;
-  } catch (err) {
-    logger.error('Failed to send reset email via Gmail SMTP', { error: (err as Error).message });
-    return false;
+      logger.info('✅ Email enviado via Gmail SMTP', { to, messageId: info.messageId });
+      return true;
+    } catch (err) {
+      logger.warn('⚠️ Gmail SMTP falhou (Render bloqueia SMTP?), tentando Resend...', {
+        error: (err as Error).message,
+      });
+    }
   }
+
+  // 2️⃣ Fallback: Resend API (funciona via HTTPS no Render)
+  if (resend) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: 'FlowSnyker <onboarding@resend.dev>',
+        to,
+        subject: '🔑 Recuperação de Senha — FlowSnyker',
+        html,
+      });
+
+      if (error) {
+        logger.error('❌ Resend API error', { error: error.message });
+        return false;
+      }
+
+      logger.info('✅ Email enviado via Resend API (fallback)', { to, id: data?.id });
+      return true;
+    } catch (err) {
+      logger.error('❌ Resend fallback falhou', { error: (err as Error).message });
+    }
+  }
+
+  // 3️⃣ Último recurso: loga o link no console
+  logger.warn('📋 Nenhum provedor de email disponível — link no console');
+  logger.info('═══════════════════════════════════════════════════════════');
+  logger.info('🔑 LINK DE RECUPERAÇÃO DE SENHA (fallback console)');
+  logger.info(`📧 Email: ${to}`);
+  logger.info(`🔗 URL: ${resetUrl}`);
+  logger.info('═══════════════════════════════════════════════════════════');
+  return false;
 };
 
 function buildResetEmailHTML(resetUrl: string, userName: string): string {
@@ -59,7 +100,6 @@ function buildResetEmailHTML(resetUrl: string, userName: string): string {
           <!-- Header com gradiente -->
           <tr>
             <td style="background: linear-gradient(135deg, rgba(255, 107, 107, 0.15) 0%, rgba(255, 169, 77, 0.08) 100%); padding: 40px 40px 30px; text-align: center;">
-              <!-- Logo -->
               <div style="display: inline-block; margin-bottom: 16px;">
                 <span style="font-size: 28px; font-weight: 800; color: #ffffff; letter-spacing: -0.02em;">⚡ Flow<span style="background: linear-gradient(135deg, #FF6B6B, #FFA94D); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">Snyker</span></span>
               </div>
