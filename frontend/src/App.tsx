@@ -51,7 +51,7 @@ export default function App() {
       <ConfirmDialog />
       <Routes>
         <Route path="/login" element={<AuthPage />} />
-        <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+        <Route path="/reset-password/:id/:token" element={<ResetPasswordPage />} />
         <Route path="/" element={
           <PrivateRoute>
             <AppLayout><DashboardPage /></AppLayout>

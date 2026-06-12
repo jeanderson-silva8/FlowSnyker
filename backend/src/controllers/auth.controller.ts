@@ -7,6 +7,7 @@ import User from '../models/User';
 import RefreshToken from '../models/RefreshToken';
 import { AuthRequest } from '../middleware/auth';
 import { seedDemoBoard } from '../seeds/demoBoard';
+import mongoose from 'mongoose';
 import { logger } from '../utils/logger';
 import { sendPasswordResetEmail } from '../utils/email';
 
@@ -235,28 +236,20 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+password');
     if (!user) {
       // Retorna sucesso mesmo se o email não existir (segurança: não revelar se o email está cadastrado)
       res.json({ message: 'Se o email estiver cadastrado, você receberá um link de recuperação.' });
       return;
     }
 
-    // Gerar token de recuperação
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
-
-    // Salvar no banco com expiração de 1 hora
-    user.resetPasswordToken = resetTokenHash;
-    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-    await User.updateOne(
-      { _id: user._id },
-      { $set: { resetPasswordToken: resetTokenHash, resetPasswordExpires: user.resetPasswordExpires } }
-    );
+    // Criar o token JWT descartável assinado com a senha atual (se mudar a senha, o link expira!)
+    const secret = process.env.JWT_SECRET! + user.password;
+    const resetToken = jwt.sign({ id: user._id.toString() }, secret, { expiresIn: '15m' });
 
     // Construir a URL de reset
     const clientUrl = process.env.CLIENT_URL?.split(',')[0]?.trim() || 'http://localhost:5173';
-    const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
+    const resetUrl = `${clientUrl}/reset-password/${user._id}/${resetToken}`;
 
     // 📧 Enviar email de recuperação via Gmail SMTP
     const emailSent = await sendPasswordResetEmail({
@@ -284,12 +277,19 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
 
 export const resetPassword = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token } = req.params;
+    const { id, token } = req.params;
     const { password } = req.body;
     const tokenStr = Array.isArray(token) ? token[0] : token;
+    const idStr = Array.isArray(id) ? id[0] : id;
 
-    if (!tokenStr || !password) {
-      res.status(400).json({ error: 'Token e nova senha são obrigatórios' });
+    if (!idStr || !tokenStr || !password) {
+      res.status(400).json({ error: 'ID, token e nova senha são obrigatórios' });
+      return;
+    }
+
+    // Valida se o ID do usuário é um ObjectId válido
+    if (!mongoose.Types.ObjectId.isValid(idStr)) {
+      res.status(400).json({ error: 'Link de recuperação inválido.' });
       return;
     }
 
@@ -298,16 +298,19 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Hashear o token recebido para comparar com o salvo no banco
-    const tokenHash = crypto.createHash('sha256').update(tokenStr).digest('hex');
-
-    const user = await User.findOne({
-      resetPasswordToken: tokenHash,
-      resetPasswordExpires: { $gt: new Date() },
-    }).select('+resetPasswordToken +resetPasswordExpires');
-
+    const user = await User.findById(idStr).select('+password');
     if (!user) {
-      res.status(400).json({ error: 'Token inválido ou expirado. Solicite um novo link de recuperação.' });
+      res.status(400).json({ error: 'Link inválido ou usuário não encontrado.' });
+      return;
+    }
+
+    // A assinatura do token é baseada na senha atual
+    const secret = process.env.JWT_SECRET! + user.password;
+    
+    try {
+      jwt.verify(tokenStr, secret, { algorithms: ['HS256'] });
+    } catch (err) {
+      res.status(400).json({ error: 'Token expirado ou inválido. Solicite um novo link de recuperação.' });
       return;
     }
 
@@ -318,10 +321,10 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       {
         $set: {
           password: hashedPassword,
-          resetPasswordToken: null,
-          resetPasswordExpires: null,
           failedLoginAttempts: 0,
           lockedUntil: null,
+          resetPasswordToken: null,
+          resetPasswordExpires: null,
         },
       }
     );

@@ -14,7 +14,7 @@ type AuthState = {
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
   forgotPassword: (email: string) => Promise<boolean>;
-  resetPassword: (token: string, password: string) => Promise<boolean>;
+  resetPassword: (id: string, token: string, password: string) => Promise<boolean>;
   clearError: () => void;
   clearSuccess: () => void;
 };
@@ -129,10 +129,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  resetPassword: async (token, password) => {
+  resetPassword: async (id, token, password) => {
     try {
       set({ isLoading: true, error: null, successMessage: null });
-      const { data } = await api.post(`/auth/reset-password/${token}`, { password });
+      const { data } = await api.post(`/auth/reset-password/${id}/${token}`, { password });
       set({
         isLoading: false,
         successMessage: data.message || 'Senha redefinida com sucesso!',

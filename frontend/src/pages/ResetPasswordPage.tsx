@@ -9,7 +9,7 @@ import GradientButton from '../components/UI/GradientButton';
 import { FlowSnykerLogo } from '../components/UI/FlowSnykerLogo';
 
 export default function ResetPasswordPage() {
-  const { token } = useParams<{ token: string }>();
+  const { id, token } = useParams<{ id: string; token: string }>();
   const navigate = useNavigate();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -63,12 +63,12 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (!token) {
+    if (!id || !token) {
       setLocalError('Token de recuperação inválido.');
       return;
     }
 
-    const success = await resetPassword(token, password);
+    const success = await resetPassword(id, token, password);
     if (success) {
       // Redirecionar para login após 3 segundos
       setTimeout(() => {

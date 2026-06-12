@@ -68,7 +68,7 @@ router.post('/refresh', csrfCheck, refresh);
 router.get('/me', auth, getMe);
 router.post('/logout', logout);
 router.post('/forgot-password', authLimiter, validate(forgotPasswordSchema), forgotPassword);
-router.post('/reset-password/:token', authLimiter, validate(resetPasswordSchema), resetPassword);
+router.post('/reset-password/:id/:token', authLimiter, validate(resetPasswordSchema), resetPassword);
 
 export default router;
 
