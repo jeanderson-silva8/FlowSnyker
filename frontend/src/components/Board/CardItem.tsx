@@ -5,8 +5,11 @@ import { Trash2, GripVertical } from 'lucide-react';
 import { getSocket } from '../../services/socket';
 import { useBoardStore } from '../../store/useBoardStore';
 
-export default function CardItem({ card, boardId }: { card: Card; boardId: string }) {
+import { useUIStore } from '../../store/useUIStore';
+
+export default function CardItem({ card, boardId, onCardClick }: { card: Card; boardId: string; onCardClick: (card: Card) => void }) {
   const { removeCard } = useBoardStore();
+  const { openConfirm } = useUIStore();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card._id,
     data: { type: 'card', card },
@@ -16,17 +19,28 @@ export default function CardItem({ card, boardId }: { card: Card; boardId: strin
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.4 : 1,
+    cursor: 'pointer',
   };
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
-    removeCard(card._id); // Optimistic UI update
-    const socket = getSocket();
-    socket?.emit('card:delete', { boardId, cardId: card._id, columnId: card.columnId });
+    openConfirm({
+      title: 'Excluir Card',
+      message: `Tem certeza que deseja excluir o card "${card.title}"? Esta ação não pode ser desfeita.`,
+      confirmText: 'Excluir Card',
+      cancelText: 'Cancelar',
+      type: 'danger',
+      onConfirm: () => {
+        removeCard(card._id); // Optimistic UI update
+        const socket = getSocket();
+        socket?.emit('card:delete', { boardId, cardId: card._id, columnId: card.columnId });
+      }
+    });
   };
 
+
   return (
-    <div ref={setNodeRef} style={style} className={`card ${isDragging ? 'dragging' : ''}`} {...attributes}>
+    <div ref={setNodeRef} style={style} className={`card ${isDragging ? 'dragging' : ''}`} {...attributes} onClick={() => onCardClick(card)}>
       <span className="card-status-dot" aria-hidden="true" />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -50,7 +64,12 @@ export default function CardItem({ card, boardId }: { card: Card; boardId: strin
         </div>
       </div>
       <div className="card-meta">
-        <span className={`card-priority ${card.priority}`}>{card.priority}</span>
+        <span className={`card-priority ${card.priority}`}>
+          {card.priority === 'low' && 'Baixa'}
+          {card.priority === 'medium' && 'Média'}
+          {card.priority === 'high' && 'Alta'}
+          {card.priority === 'urgent' && 'Urgente'}
+        </span>
         {card.assignees.length > 0 && (
           <div className="card-assignees">
             {card.assignees.map((a) => (

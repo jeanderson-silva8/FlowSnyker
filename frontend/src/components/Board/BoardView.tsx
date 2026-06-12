@@ -5,11 +5,13 @@ import { Plus } from 'lucide-react';
 import { useBoardStore } from '../../store/useBoardStore';
 import { getSocket } from '../../services/socket';
 import ColumnComponent from './ColumnComponent';
+import CardDetailModal from './CardDetailModal';
 import type { Card } from '../../types';
 
 export default function BoardView() {
   const { currentBoard, cards, moveCard, addColumn } = useBoardStore();
   const [activeCard, setActiveCard] = useState<Card | null>(null);
+  const [selectedDetailCard, setSelectedDetailCard] = useState<Card | null>(null);
   const [isAddingColumn, setIsAddingColumn] = useState(false);
   const [newColumnTitle, setNewColumnTitle] = useState('');
 
@@ -68,40 +70,52 @@ export default function BoardView() {
   if (!currentBoard) return null;
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="board-container">
-        {currentBoard.columns.sort((a, b) => a.order - b.order).map((column) => (
-          <ColumnComponent key={column._id} column={column} cards={cards.filter((c) => c.columnId === column._id)} boardId={currentBoard._id} />
-        ))}
-        {isAddingColumn ? (
-          <div className="column" style={{ padding: 16 }}>
-            <input className="input" placeholder="Nome da coluna..." value={newColumnTitle} onChange={(e) => setNewColumnTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()} autoFocus />
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <button className="btn btn-primary btn-sm" onClick={handleAddColumn}>Criar</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => setIsAddingColumn(false)}>Cancelar</button>
-            </div>
-          </div>
-        ) : (
-          <button className="add-column" onClick={() => setIsAddingColumn(true)}><Plus size={16} /> Nova Coluna</button>
-        )}
-      </div>
-      <DragOverlay>
-        {activeCard && (
-          <div className="drag-overlay-card">
-            {activeCard.labels.length > 0 && (
-              <div className="card-labels">
-                {activeCard.labels.map((l, i) => (
-                  <span key={i} className="card-label" style={{ background: `${l.color}22`, color: l.color }}>{l.text}</span>
-                ))}
+    <>
+      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="board-container">
+          {currentBoard.columns.sort((a, b) => a.order - b.order).map((column) => (
+            <ColumnComponent key={column._id} column={column} cards={cards.filter((c) => c.columnId === column._id)} boardId={currentBoard._id} onCardClick={setSelectedDetailCard} />
+          ))}
+          {isAddingColumn ? (
+            <div className="column" style={{ padding: 16 }}>
+              <input className="input" placeholder="Nome da coluna..." value={newColumnTitle} onChange={(e) => setNewColumnTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddColumn()} autoFocus />
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <button className="btn btn-primary btn-sm" onClick={handleAddColumn}>Criar</button>
+                <button className="btn btn-secondary btn-sm" onClick={() => setIsAddingColumn(false)}>Cancelar</button>
               </div>
-            )}
-            <h3 className="card-title">{activeCard.title}</h3>
-            <div className="card-meta">
-              <span className={`card-priority ${activeCard.priority}`}>{activeCard.priority}</span>
             </div>
-          </div>
-        )}
-      </DragOverlay>
-    </DndContext>
+          ) : (
+            <button className="add-column" onClick={() => setIsAddingColumn(true)}><Plus size={16} /> Nova Coluna</button>
+          )}
+        </div>
+        <DragOverlay>
+          {activeCard && (
+            <div className="drag-overlay-card">
+              {activeCard.labels.length > 0 && (
+                <div className="card-labels">
+                  {activeCard.labels.map((l, i) => (
+                    <span key={i} className="card-label" style={{ background: `${l.color}22`, color: l.color }}>{l.text}</span>
+                  ))}
+                </div>
+              )}
+              <h3 className="card-title">{activeCard.title}</h3>
+              <div className="card-meta">
+                <span className={`card-priority ${activeCard.priority}`}>
+                  {activeCard.priority === 'low' && 'Baixa'}
+                  {activeCard.priority === 'medium' && 'Média'}
+                  {activeCard.priority === 'high' && 'Alta'}
+                  {activeCard.priority === 'urgent' && 'Urgente'}
+                </span>
+              </div>
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
+      <CardDetailModal
+        card={selectedDetailCard}
+        onClose={() => setSelectedDetailCard(null)}
+        columns={currentBoard.columns}
+      />
+    </>
   );
 }

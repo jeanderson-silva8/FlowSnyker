@@ -9,6 +9,8 @@ import DashboardPage from './pages/DashboardPage';
 import BoardPage from './pages/BoardPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
 import BackgroundParticleField from './components/UI/BackgroundParticleField';
+import ConfirmDialog from './components/UI/ConfirmDialog';
+
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore();
@@ -46,6 +48,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <Toaster position="top-right" />
+      <ConfirmDialog />
       <Routes>
         <Route path="/login" element={<AuthPage />} />
         <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
