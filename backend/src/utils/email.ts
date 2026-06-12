@@ -1,12 +1,19 @@
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { logger } from './logger';
 
 // ═══════════════════════════════════════════════════════
-// 📧 Resend API — Envio via HTTP (funciona no Render Free Tier)
-// O Render bloqueia portas SMTP (25, 465, 587).
-// O Resend usa HTTPS (porta 443) — sem bloqueio.
+// 📧 Gmail SMTP via Nodemailer
+// Modelo adaptado do Projeto Dashboard - FULL
+// Usa "Senha de App" do Google (EMAIL_PASS)
 // ═══════════════════════════════════════════════════════
-const resend = new Resend(process.env.RESEND_API_KEY);
+
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
 
 interface SendResetEmailParams {
   to: string;
@@ -16,22 +23,20 @@ interface SendResetEmailParams {
 
 export const sendPasswordResetEmail = async ({ to, resetUrl, userName }: SendResetEmailParams): Promise<boolean> => {
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'FlowSnyker <onboarding@resend.dev>',
+    const mailOptions = {
+      from: `"FlowSnyker Suporte" <${process.env.EMAIL_USER}>`,
       to,
       subject: '🔑 Recuperação de Senha — FlowSnyker',
       html: buildResetEmailHTML(resetUrl, userName),
-    });
+    };
 
-    if (error) {
-      logger.error('Resend API error', { error: error.message });
-      return false;
-    }
+    // [SEGURANÇA] Envio assíncrono — se falhar, loga o erro mas não trava a resposta
+    const info = await transporter.sendMail(mailOptions);
 
-    logger.info('Password reset email sent', { to, id: data?.id });
+    logger.info('Password reset email sent via Gmail SMTP', { to, messageId: info.messageId });
     return true;
   } catch (err) {
-    logger.error('Failed to send reset email', { error: (err as Error).message });
+    logger.error('Failed to send reset email via Gmail SMTP', { error: (err as Error).message });
     return false;
   }
 };
@@ -87,7 +92,7 @@ function buildResetEmailHTML(resetUrl: string, userName: string): string {
               <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 16px 20px; margin-bottom: 24px;">
                 <p style="margin: 0 0 4px; font-size: 12px; font-weight: 600; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.06em;">⏰ Atenção</p>
                 <p style="margin: 0; font-size: 13px; color: rgba(255, 255, 255, 0.55); line-height: 1.5;">
-                  Este link expira em <strong style="color: #FF6B6B;">1 hora</strong>. Se você não solicitou esta recuperação, ignore este email — sua conta está segura.
+                  Este link expira em <strong style="color: #FF6B6B;">15 minutos</strong>. Se você não solicitou esta recuperação, ignore este email — sua conta está segura.
                 </p>
               </div>
 
