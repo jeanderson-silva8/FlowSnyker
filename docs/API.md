@@ -30,7 +30,7 @@ O access token tem validade curta (~15 min). Use `/api/auth/refresh` para renova
 | GET | `/me` | ✅ Bearer | ❌ | Dados do usuário logado |
 | POST | `/logout` | Cookie | ❌ | Invalidar refresh token |
 | POST | `/forgot-password` | ❌ | 5/min | Solicitar reset de senha |
-| POST | `/reset-password/:token` | ❌ | 5/min | Redefinir senha |
+| POST | `/reset-password/:id/:token` | ❌ | 5/min | Redefinir senha |
 
 #### POST `/register`
 ```json

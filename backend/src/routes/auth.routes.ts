@@ -34,6 +34,7 @@ const resetPasswordSchema = z.object({
   password: passwordPolicy,
 });
 
+
 // ─── Item 18: CSRF middleware para /refresh ──────────────────────
 // Valida que o header Origin bate com CLIENT_URL.
 // Requests sem Origin (curl, Postman) são permitidos em dev.

@@ -1,14 +1,7 @@
 import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
 import { logger } from './logger';
 
-// ═══════════════════════════════════════════════════════
-// 📧 Sistema de Email Híbrido:
-// 1️⃣ Gmail SMTP via Nodemailer (local / servidores que permitem SMTP)
-// 2️⃣ Resend API via HTTPS (fallback para Render Free Tier que bloqueia SMTP)
-// ═══════════════════════════════════════════════════════
-
-// --- Gmail SMTP (primário) ---
+// --- Gmail SMTP ---
 const gmailTransporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -19,9 +12,6 @@ const gmailTransporter = nodemailer.createTransport({
   socketTimeout: 10000,     // 10s para resposta
 });
 
-// --- Resend API (fallback) ---
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-
 interface SendResetEmailParams {
   to: string;
   resetUrl: string;
@@ -31,7 +21,6 @@ interface SendResetEmailParams {
 export const sendPasswordResetEmail = async ({ to, resetUrl, userName }: SendResetEmailParams): Promise<boolean> => {
   const html = buildResetEmailHTML(resetUrl, userName);
 
-  // 1️⃣ Tenta Gmail SMTP primeiro
   if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
     try {
       const info = await gmailTransporter.sendMail({
@@ -44,36 +33,12 @@ export const sendPasswordResetEmail = async ({ to, resetUrl, userName }: SendRes
       logger.info('✅ Email enviado via Gmail SMTP', { to, messageId: info.messageId });
       return true;
     } catch (err) {
-      logger.warn('⚠️ Gmail SMTP falhou (Render bloqueia SMTP?), tentando Resend...', {
-        error: (err as Error).message,
-      });
+      logger.error('❌ Envio via Gmail SMTP falhou', { error: (err as Error).message });
     }
   }
 
-  // 2️⃣ Fallback: Resend API (funciona via HTTPS no Render)
-  if (resend) {
-    try {
-      const { data, error } = await resend.emails.send({
-        from: 'FlowSnyker <onboarding@resend.dev>',
-        to,
-        subject: '🔑 Recuperação de Senha — FlowSnyker',
-        html,
-      });
-
-      if (error) {
-        logger.error('❌ Resend API error', { error: error.message });
-        return false;
-      }
-
-      logger.info('✅ Email enviado via Resend API (fallback)', { to, id: data?.id });
-      return true;
-    } catch (err) {
-      logger.error('❌ Resend fallback falhou', { error: (err as Error).message });
-    }
-  }
-
-  // 3️⃣ Último recurso: loga o link no console
-  logger.warn('📋 Nenhum provedor de email disponível — link no console');
+  // Fallback: imprime no console de log do servidor o link
+  logger.warn('📋 Credenciais de email ausentes ou falha no provedor — link gerado no console');
   logger.info('═══════════════════════════════════════════════════════════');
   logger.info('🔑 LINK DE RECUPERAÇÃO DE SENHA (fallback console)');
   logger.info(`📧 Email: ${to}`);

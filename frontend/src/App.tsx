@@ -52,6 +52,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<AuthPage />} />
         <Route path="/reset-password/:id/:token" element={<ResetPasswordPage />} />
+
         <Route path="/" element={
           <PrivateRoute>
             <AppLayout><DashboardPage /></AppLayout>

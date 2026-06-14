@@ -232,13 +232,31 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 };
 
+
+export const logout = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const raw = req.cookies?.refreshToken;
+    if (raw && typeof raw === 'string' && raw.includes('.')) {
+      const [, secret] = raw.split('.');
+      await RefreshToken.updateOne(
+        { tokenHash: hashToken(secret), revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+    }
+    res.clearCookie('refreshToken', { path: '/api/auth' });
+    res.json({ message: 'Logout realizado com sucesso' });
+  } catch {
+    res.clearCookie('refreshToken', { path: '/api/auth' });
+    res.json({ message: 'Logout realizado com sucesso' });
+  }
+};
+
 export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body;
 
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
-      // Retorna sucesso mesmo se o email não existir (segurança: não revelar se o email está cadastrado)
       res.json({ message: 'Se o email estiver cadastrado, você receberá um link de recuperação.' });
       return;
     }
@@ -252,21 +270,11 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     const resetUrl = `${clientUrl}/reset-password/${user._id}/${resetToken}`;
 
     // 📧 Enviar email de recuperação via Gmail SMTP
-    const emailSent = await sendPasswordResetEmail({
+    await sendPasswordResetEmail({
       to: email,
       resetUrl,
       userName: user.name,
     });
-
-    if (!emailSent) {
-      // Fallback: imprime no console se o envio falhar
-      logger.warn('Email send failed, printing reset link to console');
-      logger.info('═══════════════════════════════════════════════════════════');
-      logger.info('🔑 LINK DE RECUPERAÇÃO DE SENHA (fallback)');
-      logger.info(`📧 Email: ${email}`);
-      logger.info(`🔗 URL: ${resetUrl}`);
-      logger.info('═══════════════════════════════════════════════════════════');
-    }
 
     res.json({ message: 'Se o email estiver cadastrado, você receberá um link de recuperação.' });
   } catch (error) {
@@ -287,7 +295,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    // Valida se o ID do usuário é um ObjectId válido
     if (!mongoose.Types.ObjectId.isValid(idStr)) {
       res.status(400).json({ error: 'Link de recuperação inválido.' });
       return;
@@ -323,8 +330,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
           password: hashedPassword,
           failedLoginAttempts: 0,
           lockedUntil: null,
-          resetPasswordToken: null,
-          resetPasswordExpires: null,
         },
       }
     );
@@ -334,24 +339,6 @@ export const resetPassword = async (req: Request, res: Response): Promise<void> 
   } catch (error) {
     logger.error('ResetPassword failed', { error: (error as Error).message });
     res.status(500).json({ error: 'Erro interno do servidor' });
-  }
-};
-
-export const logout = async (req: Request, res: Response): Promise<void> => {
-  try {
-    const raw = req.cookies?.refreshToken;
-    if (raw && typeof raw === 'string' && raw.includes('.')) {
-      const [, secret] = raw.split('.');
-      await RefreshToken.updateOne(
-        { tokenHash: hashToken(secret), revokedAt: null },
-        { $set: { revokedAt: new Date() } }
-      );
-    }
-    res.clearCookie('refreshToken', { path: '/api/auth' });
-    res.json({ message: 'Logout realizado com sucesso' });
-  } catch {
-    res.clearCookie('refreshToken', { path: '/api/auth' });
-    res.json({ message: 'Logout realizado com sucesso' });
   }
 };
 

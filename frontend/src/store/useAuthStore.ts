@@ -111,7 +111,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const { data } = await api.post('/auth/forgot-password', { email });
       set({
         isLoading: false,
-        successMessage: data.message || 'Se o email estiver cadastrado, você receberá um link de recuperação.',
+        successMessage: data.message || 'Se o e-mail estiver cadastrado, você receberá um link de recuperação.',
       });
       return true;
     } catch (err: any) {

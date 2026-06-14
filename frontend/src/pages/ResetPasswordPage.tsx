@@ -58,13 +58,13 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (password.length < 6) {
-      setLocalError('A senha deve ter pelo menos 6 caracteres.');
+    if (password.length < 8) {
+      setLocalError('A senha deve ter pelo menos 8 caracteres.');
       return;
     }
 
     if (!id || !token) {
-      setLocalError('Token de recuperação inválido.');
+      setLocalError('Link de recuperação inválido.');
       return;
     }
 
@@ -102,7 +102,7 @@ export default function ResetPasswordPage() {
             <div ref={headingRef} style={{ opacity: 0 }}>
               <h1 className="auth-title">Redefinir sua senha</h1>
               <p className="auth-subtitle">
-                Insira sua nova senha abaixo. Ela deve ter pelo menos 6 caracteres.
+                Insira sua nova senha abaixo. Ela deve ter pelo menos 8 caracteres.
               </p>
             </div>
 
@@ -132,7 +132,7 @@ export default function ResetPasswordPage() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                   />
                 </div>
 
@@ -144,7 +144,7 @@ export default function ResetPasswordPage() {
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     required
-                    minLength={6}
+                    minLength={8}
                   />
                 </div>
 
